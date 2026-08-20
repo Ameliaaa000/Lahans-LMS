@@ -97,7 +97,7 @@ function renderNav() {
       return;
     }
 
-    const sub = el('<div class="nav-sub open"></div>');
+    const sub = el(`<div class="nav-sub ${group.open ? 'open' : ''}"></div>`);
     group.children.forEach(child => {
       const item = el(`
         <button class="nav-sub-item" data-route="${child.route}">

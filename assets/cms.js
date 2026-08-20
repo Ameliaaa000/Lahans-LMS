@@ -259,28 +259,12 @@ const SECTIONS = [
 ];
 
 function shell(active, body) {
-  const cur = SECTIONS.find(s => s.seg === active) || SECTIONS[0];
   return `
-  <div class="cms-wrap">
-    <aside class="cms-rail">
-      <button class="cms-exit" data-cms-exit>${icon('chevron-left', 'icon icon-xs')} Kembali ke Lahans Builder</button>
-      <div class="cms-rail-head">
-        <span class="cms-tag">${icon(cur.ico, 'icon icon-sm')} ${esc(cur.label)}</span>
-      </div>
-      <nav class="cms-nav">
-        ${SECTIONS.map(s => `
-          <button class="cms-nav-item ${active === s.seg ? 'active' : ''}" data-cms-go="${s.seg}">
-            ${icon(s.ico, 'icon icon-sm')}<span>${esc(s.label)}</span>
-            ${s.count ? `<em>${s.count()}</em>` : ''}
-          </button>`).join('')}
-      </nav>
-      <div class="cms-rail-foot">
-        <button class="btn btn-sm" id="cmsSave">${icon('check', 'icon icon-xs')} Simpan draft</button>
-        <button class="btn btn-sm btn-ghost" id="cmsReset">Reset data</button>
-      </div>
-    </aside>
-    <section class="cms-body">${body}</section>
-  </div>`;
+  <div class="cms-actionbar">
+    <button class="btn btn-sm" id="cmsSave">${icon('check', 'icon icon-xs')} Simpan draft</button>
+    <button class="btn btn-sm btn-ghost" id="cmsReset">Reset data</button>
+  </div>
+  <div class="cms-body">${body}</div>`;
 }
 
 function pageHead(kicker, title, desc, actions = '') {
@@ -378,7 +362,16 @@ function render(seg) {
   document.querySelectorAll('.nav-sub-item').forEach(x => x.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('is-parent-active'));
   const cmsBtn = [...document.querySelectorAll('.nav-item')].find(x => /CMS/.test(x.textContent));
-  if (cmsBtn) cmsBtn.classList.add('is-parent-active');
+  if (cmsBtn) {
+    cmsBtn.classList.add('is-parent-active');
+    cmsBtn.setAttribute('aria-expanded', 'true');
+    const sub = cmsBtn.nextElementSibling;
+    if (sub) {
+      sub.classList.add('open');
+      const child = sub.querySelector(`[data-route="cms${a ? '/' + a : ''}"]`);
+      if (child) child.classList.add('active');
+    }
+  }
 
   document.querySelector('.main').scrollTop = 0;
   wire();

@@ -928,38 +928,6 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
    dan toolbar format teks pada field naratif.
    ========================================================= */
 
-.cms-wrap { display: grid; grid-template-columns: 226px minmax(0,1fr); gap: 20px; align-items: start; min-height: calc(100vh - 108px); }
-
-.cms-rail {
-  position: sticky; top: 0; height: calc(100vh - 108px); display: flex; flex-direction: column; gap: 14px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
-  padding: 14px; box-shadow: var(--shadow-xs);
-}
-.cms-exit {
-  display: flex; align-items: center; gap: 7px; cursor: pointer; text-align: left;
-  padding: 8px 10px; border: 0; background: var(--surface-2); border-radius: var(--r-md);
-  font-size: 12px; font-weight: 600; color: var(--text-2); transition: background .15s, color .15s;
-}
-.cms-exit:hover { background: var(--primary-soft); color: var(--primary); }
-.cms-rail-head .cms-tag {
-  display: inline-flex; align-items: center; gap: 7px; font-size: 10.5px; font-weight: 700;
-  letter-spacing: .07em; text-transform: uppercase; color: var(--primary);
-  background: var(--primary-soft); border-radius: var(--r-pill); padding: 5px 10px;
-}
-.cms-nav { display: flex; flex-direction: column; gap: 3px; }
-.cms-nav-item {
-  width: 100%; display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left;
-  padding: 10px 12px; border: 1px solid transparent; border-radius: var(--r-md); background: none;
-  font-size: 13px; color: var(--text-2); transition: background .15s, color .15s;
-}
-.cms-nav-item:hover { background: var(--surface-3); color: var(--text); }
-.cms-nav-item.active { background: linear-gradient(135deg, var(--brand), var(--brand-500)); color: #fff; font-weight: 600; }
-.cms-nav-item .icon { color: currentColor; opacity: .85; }
-.cms-nav-item em { margin-left: auto; font-style: normal; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
-
-.cms-rail-foot { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 7px; }
-.cms-rail-foot .btn { width: 100%; justify-content: center; }
-
 .cms-body { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 
 /* Strip statistik — pengganti barisan kotak KPI di dashboard */
@@ -1029,22 +997,10 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
 .cms-flash .icon { color: #6ee7b7; }
 .cms-flash.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-@media (max-width: 1080px) {
-  .cms-wrap { grid-template-columns: minmax(0,1fr); min-height: 0; }
-  .cms-rail { position: static; height: auto; }
-  .cms-nav { flex-direction: row; flex-wrap: wrap; }
-  .cms-nav-item { width: auto; }
-}
-
-/* ---------------- CMS: halaman penuh tersendiri ----------------
-   Permintaan client: CMS bukan bagian dari shell Lahans Builder.
-   Saat masuk CMS, sidebar & topbar utama disembunyikan; CMS memakai
-   seluruh viewport dengan navigasinya sendiri (lihat shell() di cms.js). */
-body.cms-mode .sidebar,
-body.cms-mode .topbar { display: none; }
-body.cms-mode .app { grid-template-columns: minmax(0, 1fr); gap: 0; }
-body.cms-mode .content { gap: 0; }
-body.cms-mode .main { border-radius: var(--r-shell); }
+/* ---------------- CMS: menu biasa di dalam shell yang sama ----------------
+   CMS mengikuti aturan yang sama seperti menu Learning Development lainnya:
+   sidebar & topbar utama tetap tampil, konten berpindah di dalam .main saja. */
+.cms-actionbar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: -4px; }
 
 /* ---------------- CMS: dokumen mengalir + anchor-nav ----------------
    Menggantikan tab bernomor "1 2 3…": semua section course/module
