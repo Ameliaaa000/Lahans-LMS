@@ -259,13 +259,13 @@ const SECTIONS = [
 ];
 
 function shell(active, body) {
+  const cur = SECTIONS.find(s => s.seg === active) || SECTIONS[0];
   return `
   <div class="cms-wrap">
     <aside class="cms-rail">
       <button class="cms-exit" data-cms-exit>${icon('chevron-left', 'icon icon-xs')} Kembali ke Lahans Builder</button>
       <div class="cms-rail-head">
-        <span class="cms-tag">${icon('command', 'icon icon-sm')} Content Management</span>
-        <p>Ruang kerja pemateri untuk menyusun path, course, dan modul.</p>
+        <span class="cms-tag">${icon(cur.ico, 'icon icon-sm')} ${esc(cur.label)}</span>
       </div>
       <nav class="cms-nav">
         ${SECTIONS.map(s => `

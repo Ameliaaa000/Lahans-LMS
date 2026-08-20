@@ -39,7 +39,7 @@
   --error-soft: #fdecec;
 
   /* Radius */
-  --r-shell: 24px;
+  --r-shell: 16px;
   --r-card: 18px;
   --r-lg: 14px;
   --r-md: 12px;
@@ -456,7 +456,7 @@ button { font: inherit; color: inherit; }
 
 /* ---------------------------- Table ---------------------------- */
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; border-radius: var(--r-card); }
 table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tbl th { text-align: left; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
   color: var(--text-3); padding: 12px 22px; background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -928,10 +928,10 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
    dan toolbar format teks pada field naratif.
    ========================================================= */
 
-.cms-wrap { display: grid; grid-template-columns: 226px minmax(0,1fr); gap: 20px; align-items: start; }
+.cms-wrap { display: grid; grid-template-columns: 226px minmax(0,1fr); gap: 20px; align-items: start; min-height: calc(100vh - 108px); }
 
 .cms-rail {
-  position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px;
+  position: sticky; top: 0; height: calc(100vh - 108px); display: flex; flex-direction: column; gap: 14px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
   padding: 14px; box-shadow: var(--shadow-xs);
 }
@@ -946,8 +946,6 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
   letter-spacing: .07em; text-transform: uppercase; color: var(--primary);
   background: var(--primary-soft); border-radius: var(--r-pill); padding: 5px 10px;
 }
-.cms-rail-head p { font-size: 11.8px; color: var(--text-3); line-height: 1.5; margin-top: 9px; }
-
 .cms-nav { display: flex; flex-direction: column; gap: 3px; }
 .cms-nav-item {
   width: 100%; display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left;
@@ -959,7 +957,7 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
 .cms-nav-item .icon { color: currentColor; opacity: .85; }
 .cms-nav-item em { margin-left: auto; font-style: normal; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
 
-.cms-rail-foot { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+.cms-rail-foot { margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 7px; }
 .cms-rail-foot .btn { width: 100%; justify-content: center; }
 
 .cms-body { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
@@ -980,8 +978,8 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
 /* Baris berdivider — pengganti kartu-per-item untuk daftar berulang */
 .cms-flat-list { display: flex; flex-direction: column; }
 .cms-flat-row {
-  width: 100%; display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
-  padding: 12px 4px; border: 0; border-bottom: 1px solid var(--border); background: none;
+  width: 100%; display: flex; align-items: center; gap: 14px; cursor: pointer; text-align: left;
+  padding: 13px 22px; border: 0; border-bottom: 1px solid var(--border); background: none;
   transition: background .14s;
 }
 .cms-flat-list > :last-child, .cms-flat-list > .cms-flat-row:last-child { border-bottom: 0; }
@@ -1032,8 +1030,8 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
 .cms-flash.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 @media (max-width: 1080px) {
-  .cms-wrap { grid-template-columns: minmax(0,1fr); }
-  .cms-rail { position: static; }
+  .cms-wrap { grid-template-columns: minmax(0,1fr); min-height: 0; }
+  .cms-rail { position: static; height: auto; }
   .cms-nav { flex-direction: row; flex-wrap: wrap; }
   .cms-nav-item { width: auto; }
 }
@@ -1131,17 +1129,17 @@ select.cms-input { appearance: none; cursor: pointer;
 
 .cms-inline {
   width: 100%; padding: 7px 10px; font-size: 13px; font-family: inherit; color: var(--text);
-  border: 1px solid transparent; border-radius: var(--r-sm); background: var(--surface-2);
-  outline: none; transition: border-color .15s, background .15s; resize: vertical;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: #fff;
+  outline: none; transition: border-color .15s, box-shadow .15s; resize: vertical;
 }
-.cms-inline:focus { border-color: var(--brand-400); background: #fff; }
+.cms-inline:focus { border-color: var(--brand-400); box-shadow: 0 0 0 3px var(--primary-soft); }
 .cms-inline.sub { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
 .cms-inline.grow { flex: 1; }
 .cms-inline.pembahasan { margin-top: 9px; font-size: 12.5px; }
 .cms-mini { width: 74px; flex: none; padding: 7px 9px; font-size: 12.5px; text-align: center;
-  border: 1px solid transparent; border-radius: var(--r-sm); background: var(--surface-2); outline: none; color: var(--text); }
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: #fff; outline: none; color: var(--text); }
 .cms-mini.wide { width: 118px; text-align: left; }
-.cms-mini:focus { border-color: var(--brand-400); background: #fff; }
+.cms-mini:focus { border-color: var(--brand-400); box-shadow: 0 0 0 3px var(--primary-soft); }
 
 .cms-filters { display: flex; align-items: center; gap: 10px; padding: 13px 16px; flex-wrap: wrap; }
 .cms-filters .search-input { flex: 1; min-width: 200px; }
