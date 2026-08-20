@@ -60,7 +60,7 @@ const NAV = [
   { label: 'IT Ticketing', icon: 'ticket' },
   { label: 'Information', icon: 'info' },
   { label: 'LMS', icon: 'layers' },
-  { label: 'CMS', icon: 'command' },
+  { label: 'CMS', icon: 'command', route: 'cms' },
   { label: 'Pengaturan', icon: 'settings' },
 ];
 
@@ -79,7 +79,10 @@ function renderNav() {
     nav.appendChild(btn);
 
     if (!hasKids) {
-      btn.addEventListener('click', () => toast(`Menu "${group.label}" belum tersedia pada prototype ini.`));
+      btn.addEventListener('click', () => {
+        if (group.route) { location.hash = '#/' + group.route; closeMobileNav(); }
+        else toast(`Menu "${group.label}" belum tersedia pada prototype ini.`);
+      });
       return;
     }
 
@@ -1250,12 +1253,15 @@ function parseRoute() {
     const mod = parts[2] && /^m\d+$/.test(parts[2]) ? parseInt(parts[2].slice(1), 10) : null;
     return { name: 'course', courseId: decodeURIComponent(parts[1]), module: mod };
   }
+  if (parts[0] === 'cms') return { name: 'cms', seg: parts.slice(1) };
   const key = parts[0];
   return { name: VIEWS[key] ? key : 'monitoring' };
 }
 
 function render() {
   const r = parseRoute();
+  document.body.classList.toggle('cms-mode', r.name === 'cms');
+  if (r.name === 'cms' && window.CMS) { window.CMS.render(r.seg); return; }
   const view = r.name === 'course'
     ? (r.module !== null ? moduleView(r.courseId, r.module) : courseView(r.courseId))
     : VIEWS[r.name]();
@@ -1269,12 +1275,14 @@ function render() {
   }).join(' ');
 
   markActiveNav(r.name === 'course' ? 'elearning' : r.name);
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('is-cms-active'));
   if (view.after) view.after();
   document.querySelector('.main').scrollTop = 0;
 }
 
 /* Delegated actions */
 document.addEventListener('click', e => {
+  if (document.body.classList.contains('cms-mode')) return; // CMS punya handler sendiri
   const goto = e.target.closest('[data-goto]');
   if (goto) { location.hash = '#/' + goto.dataset.goto; return; }
 
