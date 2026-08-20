@@ -198,7 +198,7 @@ button { font: inherit; color: inherit; }
 .side-search input {
   width: 100%; padding: 10px 46px 10px 38px;
   border: 1px solid var(--border); border-radius: var(--r-md);
-  background: var(--surface-2); font-size: 13.5px; color: var(--text);
+  background: #fff; font-size: 13.5px; color: var(--text);
   outline: none; transition: border-color .15s, background .15s, box-shadow .15s;
 }
 .side-search input::placeholder { color: var(--text-3); }
@@ -1143,7 +1143,7 @@ select.cms-input { appearance: none; cursor: pointer;
 
 .cms-filters { display: flex; align-items: center; gap: 10px; padding: 13px 16px; flex-wrap: wrap; }
 .cms-filters .search-input { flex: 1; min-width: 200px; }
-.cms-filters .search-input input { background: var(--surface-2); }
+.cms-filters .search-input input { background: #fff; }
 
 .cms-picker { margin-bottom: 14px; }
 .cms-seq-num {

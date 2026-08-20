@@ -61,7 +61,17 @@ const NAV = [
   { label: 'IT Ticketing', icon: 'ticket' },
   { label: 'Information', icon: 'info' },
   { label: 'LMS', icon: 'layers' },
-  { label: 'CMS', icon: 'command', route: 'cms' },
+  {
+    label: 'CMS', icon: 'command', children: [
+      { label: 'Dashboard', route: 'cms' },
+      { label: 'Training Path', route: 'cms/paths' },
+      { label: 'Course', route: 'cms/courses' },
+      { label: 'Modul & Materi', route: 'cms/modules' },
+      { label: 'Bank Soal', route: 'cms/assessments' },
+      { label: 'Badge & Sertifikat', route: 'cms/badges' },
+      { label: 'Knowledge Base', route: 'cms/knowledge' },
+    ]
+  },
   { label: 'Pengaturan', icon: 'settings' },
 ];
 
@@ -1275,7 +1285,7 @@ function render() {
     return text + (last ? '' : ' <span class="sep">/</span>');
   }).join(' ');
 
-  markActiveNav(r.name === 'course' ? 'elearning' : r.name);
+  markActiveNav(r.name === 'course' ? 'elearning' : r.name === 'cms' ? `cms${r.seg[0] ? '/' + r.seg[0] : ''}` : r.name);
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('is-cms-active'));
   if (view.after) view.after();
   document.querySelector('.main').scrollTop = 0;

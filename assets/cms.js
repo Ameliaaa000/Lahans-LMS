@@ -1048,7 +1048,7 @@ C.ROUTES.knowledge = () => {
       `<button class="btn btn-primary btn-sm" data-add-kb>${icon('sparkles','icon icon-xs')} Entri Baru</button>`)}
     <section class="card">
       <div class="table-wrap"><table class="tbl" style="table-layout:fixed">
-        <colgroup><col style="width:11%"><col style="width:27%"><col style="width:44%"><col style="width:12%"><col style="width:6%"></colgroup>
+        <colgroup><col style="width:10%"><col style="width:24%"><col style="width:40%"><col style="width:12%"><col style="width:100px"></colgroup>
         <thead><tr><th>Kode</th><th>Judul</th><th>Deskripsi</th><th>Status</th><th></th></tr></thead>
         <tbody>${ks.map((k,i)=>`<tr>
           <td><input class="cms-mini" data-kk="code|${i}" value="${esc(k.code)}" /></td>
