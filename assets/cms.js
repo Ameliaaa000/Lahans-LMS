@@ -308,9 +308,10 @@ function viewDashboard() {
   const weakest = [...S.courses].sort((a, b) => completeness(a) - completeness(b)).slice(0, 5);
 
   const priority = [
-    ...iss.map(i => ({ sev: i.sev, txt: i.txt, href: i.href })),
+    ...iss.map(i => ({ type: 'issue', sev: i.sev, txt: i.txt, href: i.href })),
     ...weakest.filter(c => completeness(c) < 100).map(c => ({
-      sev: 'todo', txt: `${c.id} · ${c.title} baru ${completeness(c)}% lengkap.`, href: `courses/${c.id}`,
+      type: 'course', pct: completeness(c), id: c.id, title: c.title,
+      category: c.category, level: c.level, status: c.status, href: `courses/${c.id}`,
     })),
   ].slice(0, 9);
 
@@ -331,9 +332,18 @@ function viewDashboard() {
     <section class="card">
       <div class="card-head"><div><h3>Perlu Perhatian</h3><div class="sub">${priority.length ? `${priority.length} hal diurutkan dari yang paling mendesak` : 'Tidak ada temuan'}</div></div></div>
       <div class="cms-flat-list">
-        ${priority.length ? priority.map(i => `
+        ${priority.length ? priority.map(i => i.type === 'course' ? `
+          <button class="cms-flat-row" data-cms-open="${i.href}">
+            ${ring(i.pct, 'sm')}
+            <span class="cms-row-main">
+              <strong>${esc(i.id)} · ${esc(i.title)}</strong>
+              <small>${esc(i.category)} · ${esc(i.level)}</small>
+            </span>
+            ${statusBadge(i.status)}
+            ${icon('arrow-right', 'icon icon-xs')}
+          </button>` : `
           <button class="cms-flat-row ${i.sev}" data-cms-open="${i.href}">
-            ${icon(i.sev === 'error' ? 'shield' : i.sev === 'warn' ? 'info' : 'clock', 'icon icon-sm')}
+            ${icon(i.sev === 'error' ? 'shield' : 'info', 'icon icon-sm')}
             <span class="grow-text">${esc(i.txt)}</span>
             ${icon('arrow-right', 'icon icon-xs')}
           </button>`).join('')
