@@ -2,6 +2,13 @@
    Lahans Learning Academy — CMS (sisi pemateri / authoring)
    Mengelola Training Path, Course, Module, Assessment,
    Badge & Sertifikat, dan Knowledge Base.
+
+   Prinsip UX (revisi setelah review client):
+   - Dokumen mengalir + anchor-nav, bukan wizard "Next Next".
+   - Navigasi antar section bebas urutan — lompat ke mana saja.
+   - Minim kotak bersarang; baris berdivider untuk daftar berulang.
+   - Kolom ganda hanya kalau kontennya memang seimbang panjangnya.
+   - Toolbar format teks pada field naratif yang memang butuh itu.
    ========================================================= */
 (() => {
 
@@ -15,34 +22,49 @@ const CATEGORIES = D.categories.filter(c => c !== 'Semua kategori');
 const ROLES = D.roles.filter(r => r !== 'Semua peran');
 const LEVELS = D.levels.filter(l => l !== 'Semua level');
 
-function seed() {
-  return {
-    paths: D.paths.map(p => ({ ...p, status: 'published' })),
-    courses: D.catalog.map(c => ({
-      ...c,
-      status: c.kind === 'qfs' ? 'published' : 'draft',
-      badge: c.credential || '',
-      badgeValidity: c.kind === 'qfs' ? '12 bulan' : '',
-      passingScore: 80,
-      maxAttempt: 3,
-    })),
-    knowledge: D.knowledge.map(k => ({ ...k, status: 'published' })),
-    modules: D.qfs101Modules.map((m, i) => ({
-      idx: i,
-      courseId: 'QFS-101',
-      title: (D.catalog.find(c => c.id === 'QFS-101').modules[i] || {}).title || `Module ${i + 1}`,
-      ...m,
-    })),
-  };
+/* CMS bekerja LANGSUNG di atas objek yang sama dengan yang dibaca
+   learner (window.LAHANS.catalog/paths/knowledge/qfs101Modules) —
+   bukan salinan. Jadi begitu disimpan, "Lihat sebagai peserta"
+   menampilkan persis apa yang baru diketik pemateri. */
+let S = null;
+let PRISTINE = null;
+const clone = x => JSON.parse(JSON.stringify(x));
+
+function ensureDefaults() {
+  S.paths.forEach(p => { if (p.status === undefined) p.status = 'published'; });
+  S.courses.forEach(c => {
+    if (c.status === undefined) c.status = c.kind === 'qfs' ? 'published' : 'draft';
+    if (c.badge === undefined) c.badge = c.credential || '';
+    if (c.badgeValidity === undefined) c.badgeValidity = c.kind === 'qfs' ? '12 bulan' : '';
+    if (c.passingScore === undefined) c.passingScore = 80;
+    if (c.maxAttempt === undefined) c.maxAttempt = 3;
+  });
+  S.knowledge.forEach(k => { if (k.status === undefined) k.status = 'published'; });
+  const qfs101 = S.courses.find(c => c.id === 'QFS-101');
+  S.modules.forEach((m, i) => {
+    if (m.courseId === undefined) m.courseId = 'QFS-101';
+    if (m.idx === undefined) m.idx = i;
+    if (m.title === undefined) m.title = (qfs101 && qfs101.modules[i] || {}).title || `Module ${i + 1}`;
+    if (m.lesson === undefined) m.lesson = (qfs101 && qfs101.modules[i] || {}).lesson || '';
+    if (m.minutes === undefined) m.minutes = (qfs101 && qfs101.modules[i] || {}).minutes || '';
+  });
 }
 
-let S = null;
+function applySnapshot(snap) {
+  (snap.paths || []).forEach(sp => { const p = S.paths.find(x => x.id === sp.id); if (p) Object.assign(p, sp); });
+  (snap.courses || []).forEach(sc => { const c = S.courses.find(x => x.id === sc.id); if (c) Object.assign(c, sc); });
+  (snap.knowledge || []).forEach((sk, i) => { if (S.knowledge[i]) Object.assign(S.knowledge[i], sk); });
+  (snap.modules || []).forEach((sm, i) => { if (S.modules[i]) Object.assign(S.modules[i], sm); });
+}
+
 function load() {
+  S = { paths: D.paths, courses: D.catalog, knowledge: D.knowledge, modules: D.qfs101Modules };
+  ensureDefaults();
+  if (!PRISTINE) PRISTINE = clone(S);
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) { S = JSON.parse(raw); return; }
+    if (raw) applySnapshot(JSON.parse(raw));
   } catch (e) {}
-  S = seed();
 }
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) {}
@@ -50,14 +72,20 @@ function save() {
 }
 function resetAll() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) {}
-  S = seed();
+  if (PRISTINE) {
+    S.paths.length = 0; PRISTINE.paths.forEach(p => S.paths.push(clone(p)));
+    S.courses.length = 0; PRISTINE.courses.forEach(c => S.courses.push(clone(c)));
+    S.knowledge.length = 0; PRISTINE.knowledge.forEach(k => S.knowledge.push(clone(k)));
+    S.modules.length = 0; PRISTINE.modules.forEach(m => S.modules.push(clone(m)));
+  }
   flash('Data dikembalikan ke kondisi awal');
 }
 
 /* ---------------------------------------------------------
-   Helper
+   Helper umum
    --------------------------------------------------------- */
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+const stripHtml = s => String(s ?? '').replace(/<[^>]+>/g, ' ');
 const icon = (n, c = 'icon') => `<svg class="${c}"><use href="#i-${n}"/></svg>`;
 const go = h => { location.hash = h; };
 
@@ -102,9 +130,9 @@ function statusBadge(st) {
     : `<span class="badge badge-warning">${icon('clock', 'icon icon-xs')} Draft</span>`;
 }
 
-function ring(pct) {
+function ring(pct, size = 'md') {
   const tone = pct === 100 ? 'ok' : pct >= 60 ? 'mid' : 'low';
-  return `<span class="cms-ring ${tone}" style="--p:${pct}"><i>${pct}<small>%</small></i></span>`;
+  return `<span class="cms-ring ${tone} ${size === 'sm' ? 'sm' : ''}" style="--p:${pct}"><i>${pct}<small>%</small></i></span>`;
 }
 
 /* Validasi silang — dipakai di dashboard */
@@ -113,24 +141,23 @@ function issues() {
   const ids = new Set(S.courses.map(c => c.id));
   S.courses.forEach(c => {
     if (c.prerequisite && !ids.has(c.prerequisite))
-      out.push({ sev: 'error', txt: `Course ${c.id} punya prasyarat ${c.prerequisite} yang tidak ada di katalog.`, href: `#/cms/courses/${c.id}` });
+      out.push({ sev: 'error', txt: `Course ${c.id} punya prasyarat ${c.prerequisite} yang tidak ada di katalog.`, href: `courses/${c.id}` });
     if (c.status === 'published' && completeness(c) < 100)
-      out.push({ sev: 'warn', txt: `${c.id} sudah published tapi kelengkapannya baru ${completeness(c)}%.`, href: `#/cms/courses/${c.id}` });
+      out.push({ sev: 'warn', txt: `${c.id} sudah published tapi kelengkapannya baru ${completeness(c)}%.`, href: `courses/${c.id}` });
   });
   S.paths.forEach(p => {
     const missing = (p.courseIds || []).filter(id => !ids.has(id));
     if (missing.length)
-      out.push({ sev: 'error', txt: `Path "${p.title}" memuat course yang tidak ada: ${missing.join(', ')}.`, href: `#/cms/paths/${p.id}` });
+      out.push({ sev: 'error', txt: `Path "${p.title}" memuat course yang tidak ada: ${missing.join(', ')}.`, href: `paths/${p.id}` });
     if (!(p.courseIds || []).length)
-      out.push({ sev: 'warn', txt: `Path "${p.title}" belum berisi course apa pun.`, href: `#/cms/paths/${p.id}` });
+      out.push({ sev: 'warn', txt: `Path "${p.title}" belum berisi course apa pun.`, href: `paths/${p.id}` });
   });
-  // rantai prasyarat melingkar
   S.courses.forEach(c => {
     const seen = new Set();
     let cur = c.prerequisite;
     while (cur) {
       if (seen.has(cur) || cur === c.id) {
-        out.push({ sev: 'error', txt: `Rantai prasyarat melingkar terdeteksi di ${c.id}.`, href: `#/cms/courses/${c.id}` });
+        out.push({ sev: 'error', txt: `Rantai prasyarat melingkar terdeteksi di ${c.id}.`, href: `courses/${c.id}` });
         break;
       }
       seen.add(cur);
@@ -139,6 +166,84 @@ function issues() {
   });
   return out;
 }
+
+/* ---------------------------------------------------------
+   Rich text field — toolbar ringan untuk field naratif
+   (Bold, Italic, Bullet, Numbered). Disimpan sebagai HTML.
+   --------------------------------------------------------- */
+function richField(label, key, html, hint) {
+  return `
+  <label class="cms-field">
+    <span class="cms-label">${esc(label)}</span>
+    <div class="cms-rt">
+      <div class="cms-rt-bar" data-rt-bar>
+        <button type="button" data-rt-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-rt-cmd="italic" title="Italic"><i>I</i></button>
+        <span class="cms-rt-sep"></span>
+        <button type="button" data-rt-cmd="insertUnorderedList" title="Bullet list">${icon('layers', 'icon icon-xs')}</button>
+        <button type="button" data-rt-cmd="insertOrderedList" title="Numbered list">${icon('clipboard', 'icon icon-xs')}</button>
+      </div>
+      <div class="cms-rt-body" contenteditable="true" data-rich="${key}">${html || ''}</div>
+    </div>
+    ${hint ? `<em class="cms-hint">${esc(hint)}</em>` : ''}
+  </label>`;
+}
+
+document.addEventListener('mousedown', e => {
+  const b = e.target.closest('[data-rt-cmd]');
+  if (!b) return;
+  e.preventDefault();
+  document.execCommand(b.dataset.rtCmd, false, null);
+});
+
+/* ---------------------------------------------------------
+   Dokumen mengalir + anchor-nav
+   Menggantikan pola tab bernomor: semua section tersusun
+   dalam satu halaman, dinavigasi lewat daftar pintas di kiri
+   yang boleh diklik dalam urutan apa saja.
+   --------------------------------------------------------- */
+function docLayout(sections) {
+  const nav = sections.map(s => `
+    <a href="#${s.id}" data-doc-jump="${s.id}">
+      <span class="dot ${s.ok === false ? '' : s.ok ? 'ok' : 'na'}"></span>
+      ${esc(s.label)}
+    </a>`).join('');
+  const body = sections.map(s => `
+    <section class="cms-doc-section" id="${s.id}">
+      <h3>${esc(s.label)}</h3>
+      ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
+      ${s.html}
+    </section>`).join('');
+  return `
+  <div class="cms-doc">
+    <nav class="cms-doc-nav">${nav}</nav>
+    <div class="cms-doc-body" data-doc-body>${body}</div>
+  </div>`;
+}
+
+function initDocNav(root) {
+  const links = [...root.querySelectorAll('.cms-doc-nav a')];
+  const secs = [...root.querySelectorAll('.cms-doc-section')];
+  if (window.__cmsIO) window.__cmsIO.disconnect();
+  if (!secs.length) return;
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      links.forEach(l => l.classList.toggle('active', l.dataset.docJump === en.target.id));
+    });
+  }, { root: document.querySelector('.main'), rootMargin: '-12% 0px -70% 0px', threshold: 0 });
+  secs.forEach(s => io.observe(s));
+  window.__cmsIO = io;
+  if (links[0]) links[0].classList.add('active');
+}
+
+document.addEventListener('click', e => {
+  const j = e.target.closest('[data-doc-jump]');
+  if (!j) return;
+  e.preventDefault();
+  const el = document.getElementById(j.dataset.docJump);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
 /* ---------------------------------------------------------
    Shell
@@ -157,6 +262,7 @@ function shell(active, body) {
   return `
   <div class="cms-wrap">
     <aside class="cms-rail">
+      <button class="cms-exit" data-cms-exit>${icon('chevron-left', 'icon icon-xs')} Kembali ke Lahans Builder</button>
       <div class="cms-rail-head">
         <span class="cms-tag">${icon('command', 'icon icon-sm')} Content Management</span>
         <p>Ruang kerja pemateri untuk menyusun path, course, dan modul.</p>
@@ -190,83 +296,51 @@ function pageHead(kicker, title, desc, actions = '') {
 }
 
 /* ---------------------------------------------------------
-   Dashboard
+   Dashboard — satu strip statistik + satu panel prioritas,
+   bukan tujuh kotak terpisah.
    --------------------------------------------------------- */
 function viewDashboard() {
   const pub = S.courses.filter(c => c.status === 'published').length;
-  const draft = S.courses.length - pub;
   const modTotal = S.courses.reduce((n, c) => n + (c.modules || []).length, 0);
   const qTotal = S.courses.reduce((n, c) => n + (c.pretest || []).length + (c.posttest || []).length + (c.quiz || []).length, 0);
   const withBadge = S.courses.filter(c => c.badge).length;
   const iss = issues();
-  const weakest = [...S.courses].sort((a, b) => completeness(a) - completeness(b)).slice(0, 6);
+  const weakest = [...S.courses].sort((a, b) => completeness(a) - completeness(b)).slice(0, 5);
+
+  const priority = [
+    ...iss.map(i => ({ sev: i.sev, txt: i.txt, href: i.href })),
+    ...weakest.filter(c => completeness(c) < 100).map(c => ({
+      sev: 'todo', txt: `${c.id} · ${c.title} baru ${completeness(c)}% lengkap.`, href: `courses/${c.id}`,
+    })),
+  ].slice(0, 9);
 
   return shell('', `
     ${pageHead('Content management', 'Ruang Kerja Pemateri',
       'Semua yang dibuat di sini langsung membentuk apa yang dilihat peserta di Learning Development.',
       `<button class="btn btn-sm" data-cms-go="courses">${icon('book', 'icon icon-xs')} Kelola Course</button>
-       <button class="btn btn-primary btn-sm" data-cms-new="course">${icon('sparkles', 'icon icon-xs')} Course Baru</button>`)}
+       <button class="btn btn-primary btn-sm" data-new-course>${icon('sparkles', 'icon icon-xs')} Course Baru</button>`)}
 
-    <div class="grid g-4">
-      ${kpi('route', 'blue', 'Training Path', S.paths.length, `${S.paths.reduce((n, p) => n + p.courseIds.length, 0)} penempatan course`)}
-      ${kpi('book', 'sky', 'Course', S.courses.length, `${pub} published · ${draft} draft`)}
-      ${kpi('layers', 'violet', 'Modul', modTotal, `${S.modules.length} modul bermateri lengkap`)}
-      ${kpi('clipboard', 'amber', 'Soal Assessment', qTotal, 'pre-test, knowledge check, post-test')}
-    </div>
-
-    <div class="grid" style="grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr)">
-      <section class="card">
-        <div class="card-head">
-          <div><h3>Course Paling Perlu Dilengkapi</h3><div class="sub">Diurutkan dari kelengkapan terendah</div></div>
-          <div class="right"><button class="btn btn-sm btn-ghost" data-cms-go="courses">Lihat semua</button></div>
-        </div>
-        <div class="card-pad cms-list">
-          ${weakest.map(c => `
-            <button class="cms-row" data-cms-open="courses/${c.id}">
-              ${ring(completeness(c))}
-              <span class="cms-row-main">
-                <strong>${esc(c.id)} · ${esc(c.title)}</strong>
-                <small>${esc(c.category)} · ${esc(c.level)}</small>
-              </span>
-              ${statusBadge(c.status)}
-              ${icon('arrow-right', 'icon icon-xs')}
-            </button>`).join('')}
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head"><div><h3>Perlu Diperiksa</h3><div class="sub">${iss.length} temuan</div></div></div>
-        <div class="card-pad cms-list">
-          ${iss.length ? iss.slice(0, 8).map(i => `
-            <button class="cms-issue ${i.sev}" data-cms-open="${i.href.replace('#/cms/', '')}">
-              ${icon(i.sev === 'error' ? 'shield' : 'info', 'icon icon-sm')}
-              <span>${esc(i.txt)}</span>
-            </button>`).join('')
-            : `<div class="cms-empty">${icon('check-circle')}<p>Semua konten lolos pemeriksaan.</p></div>`}
-        </div>
-      </section>
-    </div>
+    <section class="cms-stat-strip">
+      <div><b>${S.paths.length}</b><span>Training path</span></div>
+      <div><b>${S.courses.length}</b><span>Course · ${pub} published</span></div>
+      <div><b>${modTotal}</b><span>Modul · ${S.modules.length} bermateri lengkap</span></div>
+      <div><b>${qTotal}</b><span>Soal assessment</span></div>
+      <div><b>${withBadge}/${S.courses.length}</b><span>Course ber-badge</span></div>
+    </section>
 
     <section class="card">
-      <div class="card-head"><div><h3>Cakupan Badge &amp; Sertifikat</h3><div class="sub">Course yang sudah punya credential</div></div>
-        <div class="right"><span class="badge badge-primary">${withBadge} / ${S.courses.length}</span></div></div>
-      <div class="card-pad">
-        <div class="bar"><i style="width:${Math.round(withBadge / S.courses.length * 100)}%"></i></div>
-        <p style="font-size:12.5px;color:var(--text-2);margin-top:10px">
-          ${S.courses.length - withBadge} course belum menetapkan badge. Peserta tidak akan menerima bukti kompetensi untuk course tersebut.</p>
-        <button class="btn btn-sm" style="margin-top:12px" data-cms-go="badges">${icon('shield', 'icon icon-xs')} Atur Badge</button>
+      <div class="card-head"><div><h3>Perlu Perhatian</h3><div class="sub">${priority.length ? `${priority.length} hal diurutkan dari yang paling mendesak` : 'Tidak ada temuan'}</div></div></div>
+      <div class="cms-flat-list">
+        ${priority.length ? priority.map(i => `
+          <button class="cms-flat-row ${i.sev}" data-cms-open="${i.href}">
+            ${icon(i.sev === 'error' ? 'shield' : i.sev === 'warn' ? 'info' : 'clock', 'icon icon-sm')}
+            <span class="grow-text">${esc(i.txt)}</span>
+            ${icon('arrow-right', 'icon icon-xs')}
+          </button>`).join('')
+          : `<div class="cms-empty">${icon('check-circle')}<p>Semua konten lolos pemeriksaan dan lengkap.</p></div>`}
       </div>
     </section>
   `);
-}
-
-function kpi(ico, tone, title, value, desc) {
-  return `
-  <div class="card kpi">
-    <div class="kpi-top"><div class="kpi-icon tone-${tone}">${icon(ico, 'icon icon-sm')}</div><div class="kpi-title">${esc(title)}</div></div>
-    <div class="kpi-value">${esc(value)}</div>
-    <div class="kpi-desc">${esc(desc)}</div>
-  </div>`;
 }
 
 /* ---------------------------------------------------------
@@ -277,11 +351,11 @@ const ROUTES = {};
 function render(seg) {
   if (!S) load();
   const main = document.getElementById('view');
-  const [a, b] = seg;
+  const [a, b, c2] = seg;
   let html;
 
   if (!a) html = viewDashboard();
-  else if (ROUTES[a]) html = ROUTES[a](b);
+  else if (ROUTES[a]) html = ROUTES[a](b, c2);
   else html = viewDashboard();
 
   main.innerHTML = html;
@@ -298,6 +372,8 @@ function render(seg) {
 
   document.querySelector('.main').scrollTop = 0;
   wire();
+  const doc = main.querySelector('[data-doc-body]');
+  if (doc) initDocNav(main);
 }
 
 function wire() {
@@ -316,22 +392,25 @@ document.addEventListener('click', e => {
   if (o) { go('#/cms/' + o.dataset.cmsOpen); return; }
 });
 
-window.CMS = { render, get state() { return S; }, save, ROUTES, shell, pageHead, esc, icon, flash,
-  statusBadge, ring, completeness, courseChecklist, CATEGORIES, ROLES, LEVELS };
+const segs = () => location.hash.split('/').filter(Boolean).slice(2);
+
+window.CMS = {
+  render, get state() { return S; }, save, ROUTES, shell, pageHead, esc, stripHtml, icon, flash,
+  statusBadge, ring, completeness, courseChecklist, CATEGORIES, ROLES, LEVELS, richField, docLayout, initDocNav, segs,
+};
 
 })();
 /* =========================================================
    CMS — Training Path
+   Satu halaman mengalir: identitas ringkas di atas, lalu
+   urutan course jadi konten utama (bukan dibagi kolom sempit).
    ========================================================= */
 (() => {
-const C = window.CMS, { esc, icon, shell, pageHead, statusBadge } = C;
+const C = window.CMS, { esc, icon, shell, pageHead, statusBadge, richField, stripHtml } = C;
 const S = () => C.state;
 
-function field(label, html, hint) {
-  return `<label class="cms-field"><span class="cms-label">${esc(label)}</span>${html}${hint ? `<em class="cms-hint">${esc(hint)}</em>` : ''}</label>`;
-}
-const input = (k, v, ph = '') => `<input class="cms-input" data-k="${k}" value="${esc(v || '')}" placeholder="${esc(ph)}" />`;
-const area = (k, v, r = 3) => `<textarea class="cms-input" data-k="${k}" rows="${r}">${esc(v || '')}</textarea>`;
+const fld = (l, h, hint) => `<label class="cms-field"><span class="cms-label">${esc(l)}</span>${h}${hint ? `<em class="cms-hint">${esc(hint)}</em>` : ''}</label>`;
+const inp = (k, v, ph = '') => `<input class="cms-input" data-k="${k}" value="${esc(v || '')}" placeholder="${esc(ph)}" />`;
 
 /* ---------------- List ---------------- */
 C.ROUTES.paths = (id) => {
@@ -350,7 +429,7 @@ C.ROUTES.paths = (id) => {
             <td class="code">${i+1}</td>
             <td class="t-title">${esc(p.title)}</td>
             <td><span class="badge badge-neutral">${esc(p.eyebrow||'—')}</span></td>
-            <td>${esc(p.audience||'—')}</td>
+            <td>${esc(stripHtml(p.audience||'—'))}</td>
             <td><span class="badge badge-primary">${p.courseIds.length} course</span></td>
             <td>${esc(p.duration||'—')}</td>
             <td>${statusBadge(p.status)}</td>
@@ -370,57 +449,56 @@ function editor(id) {
   const totalMin = picked.reduce((n,c)=>n+(parseInt(String(c.duration).replace(/\D/g,''),10)||0),0);
 
   return shell('paths', `
-    ${pageHead('Edit training path', p.title, 'Atur identitas path lalu susun urutan course-nya.',
-      `<button class="btn btn-sm" data-cms-go="paths">${icon('chevron-left','icon icon-xs')} Kembali</button>
+    ${pageHead('Edit training path', p.title, 'Atur identitas path lalu susun urutan course-nya — semua dalam satu halaman, tidak perlu berpindah tahap.',
+      `<button class="btn btn-sm" data-cms-go="paths">${icon('chevron-left','icon icon-xs')} Daftar path</button>
        <button class="btn btn-sm" data-preview-path="${p.id}">${icon('play','icon icon-xs')} Lihat sebagai peserta</button>
        <button class="btn btn-primary btn-sm" data-save-path="${p.id}">${icon('check','icon icon-xs')} Simpan</button>`)}
 
-    <div class="cms-cols">
-      <section class="card">
-        <div class="card-head"><div><h3>1 · Identitas Path</h3></div></div>
-        <div class="card-pad cms-form" data-path-form="${p.id}">
-          ${field('Nama Path *', input('title', p.title))}
-          ${field('Kategori / Eyebrow', input('eyebrow', p.eyebrow, 'mis. Mandatory + role-based'))}
-          ${field('Deskripsi', area('description', p.description))}
-          ${field('Target Peserta', input('audience', p.audience))}
-          ${field('Estimasi Waktu', input('duration', p.duration, 'mis. 12–16 jam'))}
-          ${field('Status', `<select class="cms-input" data-k="status">
-              <option value="draft" ${p.status==='draft'?'selected':''}>Draft</option>
-              <option value="published" ${p.status==='published'?'selected':''}>Published</option>
-            </select>`)}
-        </div>
-      </section>
+    <section class="card">
+      <div class="card-pad cms-identity-row" data-path-form="${p.id}">
+        ${fld('Nama Path *', inp('title', p.title))}
+        ${fld('Kategori / Eyebrow', inp('eyebrow', p.eyebrow, 'mis. Mandatory + role-based'))}
+        ${fld('Target Peserta', inp('audience', p.audience))}
+        ${fld('Estimasi Waktu', inp('duration', p.duration, 'mis. 12–16 jam'))}
+        ${fld('Status', `<select class="cms-input" data-k="status">
+            <option value="draft" ${p.status==='draft'?'selected':''}>Draft</option>
+            <option value="published" ${p.status==='published'?'selected':''}>Published</option>
+          </select>`)}
+      </div>
+      <div class="card-pad" style="padding-top:0" data-path-form="${p.id}">
+        ${richField('Deskripsi', 'description', p.description)}
+      </div>
+    </section>
 
-      <section class="card">
-        <div class="card-head">
-          <div><h3>2 · Urutan Course</h3><div class="sub">${picked.length} course · ${totalMin} menit materi</div></div>
+    <section class="card">
+      <div class="card-head">
+        <div><h3>Urutan Course</h3><div class="sub">${picked.length} course · ${totalMin} menit materi</div></div>
+      </div>
+      <div class="card-pad">
+        <div class="cms-picker">
+          <select class="cms-input" id="pathAddSel">
+            <option value="">+ Tambahkan course ke path…</option>
+            ${all.filter(c=>!p.courseIds.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.id)} · ${esc(c.title)}</option>`).join('')}
+          </select>
         </div>
-        <div class="card-pad">
-          <div class="cms-picker">
-            <select class="cms-input" id="pathAddSel">
-              <option value="">+ Tambahkan course ke path…</option>
-              ${all.filter(c=>!p.courseIds.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.id)} · ${esc(c.title)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="cms-seq" id="pathSeq">
-            ${picked.length ? picked.map((c,i)=>`
-              <div class="cms-seq-row" data-cid="${c.id}">
-                <span class="cms-seq-num">${String(i+1).padStart(2,'0')}</span>
-                <span class="cms-row-main">
-                  <strong>${esc(c.id)} · ${esc(c.title)}</strong>
-                  <small>${esc(c.category)} · ${esc(c.level)} · ${esc(c.duration)}${c.prerequisite?` · prasyarat ${esc(c.prerequisite)}`:''}</small>
-                </span>
-                ${C.ring(C.completeness(c))}
-                <span class="cms-seq-act">
-                  <button class="icon-btn" data-mv="up" title="Naik">${icon('chevron-up-down','icon icon-xs')}</button>
-                  <button class="icon-btn" data-rm title="Hapus dari path">${icon('close','icon icon-xs')}</button>
-                </span>
-              </div>`).join('')
-              : `<div class="cms-empty">${icon('route')}<p>Belum ada course. Tambahkan lewat dropdown di atas.</p></div>`}
-          </div>
+        <div class="cms-flat-list" id="pathSeq">
+          ${picked.length ? picked.map((c,i)=>`
+            <div class="cms-flat-row static" data-cid="${c.id}">
+              <span class="cms-seq-num">${String(i+1).padStart(2,'0')}</span>
+              <span class="cms-row-main">
+                <strong>${esc(c.id)} · ${esc(c.title)}</strong>
+                <small>${esc(c.category)} · ${esc(c.level)} · ${esc(c.duration)}${c.prerequisite?` · prasyarat ${esc(c.prerequisite)}`:''}</small>
+              </span>
+              ${C.ring(C.completeness(c), 'sm')}
+              <span class="cms-seq-act">
+                <button class="icon-btn" data-mv="up" title="Naik">${icon('chevron-up-down','icon icon-xs')}</button>
+                <button class="icon-btn" data-rm title="Hapus dari path">${icon('close','icon icon-xs')}</button>
+              </span>
+            </div>`).join('')
+            : `<div class="cms-empty">${icon('route')}<p>Belum ada course. Tambahkan lewat dropdown di atas.</p></div>`}
         </div>
-      </section>
-    </div>`);
+      </div>
+    </section>`);
 }
 
 /* ---------------- Interaksi ---------------- */
@@ -428,13 +506,16 @@ document.addEventListener('input', e => {
   const form = e.target.closest('[data-path-form]');
   if (!form) return;
   const p = S().paths.find(x => x.id === form.dataset.pathForm);
+  if (!p) return;
   const k = e.target.dataset.k;
-  if (p && k) p[k] = e.target.value;
+  if (k) { p[k] = e.target.value; return; }
+  const rk = e.target.dataset.rich;
+  if (rk) p[rk] = e.target.innerHTML;
 });
 
 document.addEventListener('change', e => {
   if (e.target.id === 'pathAddSel' && e.target.value) {
-    const id = location.hash.split('/').pop();
+    const id = location.hash.split('/').filter(Boolean).pop();
     const p = S().paths.find(x => x.id === id);
     p.courseIds.push(e.target.value);
     C.render(['paths', id]);
@@ -454,9 +535,9 @@ document.addEventListener('click', e => {
   const pv = e.target.closest('[data-preview-path]');
   if (pv) { location.hash = '#/path'; return; }
 
-  const row = e.target.closest('.cms-seq-row');
+  const row = e.target.closest('.cms-flat-row[data-cid]');
   if (!row) return;
-  const id = location.hash.split('/').pop();
+  const id = location.hash.split('/').filter(Boolean).pop();
   const p = S().paths.find(x => x.id === id);
   if (!p) return;
   const cid = row.dataset.cid;
@@ -469,21 +550,20 @@ document.addEventListener('click', e => {
 
 })();
 /* =========================================================
-   CMS — Course (info, outcome, modul, assessment, OJT, badge)
+   CMS — Course
+   Dokumen mengalir dengan anchor-nav: Info, Hasil Belajar,
+   Modul, Pre-test, Final Assessment, OJT & Badge, Sumber.
+   Semua section terlihat sekaligus lewat scroll; anchor-nav
+   di kiri untuk lompat cepat tanpa harus "Next" berurutan.
    ========================================================= */
 (() => {
-const C = window.CMS, { esc, icon, shell, pageHead, statusBadge, ring, completeness, courseChecklist } = C;
+const C = window.CMS, { esc, icon, shell, pageHead, statusBadge, ring, completeness, courseChecklist, richField, docLayout, stripHtml, segs } = C;
 const S = () => C.state;
-const cur = () => S().courses.find(c => c.id === location.hash.split('/').pop());
+const cur = () => S().courses.find(c => c.id === segs()[1]);
 
 const fld = (l, h, hint) => `<label class="cms-field"><span class="cms-label">${esc(l)}</span>${h}${hint?`<em class="cms-hint">${esc(hint)}</em>`:''}</label>`;
 const inp = (k, v, ph='') => `<input class="cms-input" data-k="${k}" value="${esc(v||'')}" placeholder="${esc(ph)}" />`;
-const ta  = (k, v, r=3) => `<textarea class="cms-input" data-k="${k}" rows="${r}">${esc(v||'')}</textarea>`;
 const sel = (k, v, opts) => `<select class="cms-input" data-k="${k}">${opts.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
-
-let TAB = 'info';
-const TABS = [['info','Info Dasar'],['outcome','Hasil Belajar'],['modules','Modul'],
-              ['pretest','Pre-test'],['posttest','Final Assessment'],['ojt','OJT & Badge'],['sources','Sumber']];
 
 /* ---------------- List ---------------- */
 let fq = '', fcat = 'Semua kategori', fst = 'Semua status';
@@ -517,7 +597,7 @@ C.ROUTES.courses = (id) => {
           <td>${esc(c.level)}</td>
           <td>${(c.modules||[]).length}</td>
           <td>${c.badge?`<span class="badge badge-success">${icon('shield','icon icon-xs')} Ada</span>`:`<span class="badge badge-error">Belum</span>`}</td>
-          <td>${ring(completeness(c))}</td>
+          <td>${ring(completeness(c),'sm')}</td>
           <td>${statusBadge(c.status)}</td>
           <td style="text-align:right"><button class="btn btn-sm" data-cms-open="courses/${c.id}">Edit</button></td>
         </tr>`).join('')}</tbody>
@@ -525,152 +605,89 @@ C.ROUTES.courses = (id) => {
     </section>`);
 };
 
-/* ---------------- Editor ---------------- */
+/* ---------------- Editor: dokumen mengalir ---------------- */
 function editor(id) {
   const c = S().courses.find(x => x.id === id);
   if (!c) return C.ROUTES.courses();
   const chk = courseChecklist(c);
+  const okFor = label => (chk.find(x => x.key === label) || {}).ok;
+
+  const sections = [
+    { id: 'info', label: 'Info Dasar', ok: okFor('Info dasar') && okFor('Ringkasan & target peserta'), html: secInfo(c) },
+    { id: 'outcome', label: 'Hasil Belajar', ok: okFor('Hasil belajar'), html: listEditor('outcomes', c, 'Tulis satu hasil belajar…') },
+    { id: 'modules', label: 'Modul', ok: okFor('Modul'), html: secModules(c) },
+    { id: 'pretest', label: 'Pre-test', ok: (c.pretest||[]).length>0, html: secQuiz(c,'pretest') },
+    { id: 'posttest', label: 'Final Assessment', ok: okFor('Final assessment'), html: secQuiz(c,'posttest') },
+    { id: 'ojt', label: 'OJT & Badge', ok: okFor('Badge / sertifikat') && okFor('OJT & rubrik'), html: secOjt(c) },
+    { id: 'sources', label: 'Sumber', ok: okFor('Sumber referensi'), html: secSources(c) },
+  ];
 
   return shell('courses', `
-    ${pageHead(`${c.id} · ${c.category}`, c.title, '',
-      `<button class="btn btn-sm" data-cms-go="courses">${icon('chevron-left','icon icon-xs')} Kembali</button>
-       <button class="btn btn-sm" data-preview-course="${c.id}">${icon('play','icon icon-xs')} Lihat sebagai peserta</button>
-       <button class="btn btn-primary btn-sm" data-save-course>${icon('check','icon icon-xs')} Simpan</button>`)}
-
-    <div class="cms-checkbar">
-      ${ring(completeness(c))}
-      <div class="cms-checkitems">
-        ${chk.map(x=>`<span class="cms-check ${x.ok?'ok':''}">${icon(x.ok?'check-circle':'close','icon icon-xs')}${esc(x.key)}</span>`).join('')}
+    <div class="page-head">
+      <div>
+        <span class="kicker">${esc(c.id)} · ${esc(c.category)}</span>
+        <h1>${esc(c.title)}</h1>
+        <div class="cms-inline-progress">${ring(completeness(c),'sm')}<span>${completeness(c)}% lengkap — isi bagian mana saja lewat daftar di kiri, urutan bebas.</span></div>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-sm" data-cms-go="courses">${icon('chevron-left','icon icon-xs')} Daftar course</button>
+        <button class="btn btn-sm" data-preview-course="${c.id}">${icon('play','icon icon-xs')} Lihat sebagai peserta</button>
+        <button class="btn btn-primary btn-sm" data-save-course>${icon('check','icon icon-xs')} Simpan</button>
       </div>
     </div>
-
-    <div class="tabbar">${TABS.map(([k,l],i)=>`
-      <button class="tab ${TAB===k?'active':''}" data-cstab="${k}"><span class="tnum">${i+1}</span>${esc(l)}</button>`).join('')}</div>
-
-    <div class="cms-form" data-course-form="${c.id}">${body(c)}</div>`);
+    <div class="cms-form" data-course-form="${c.id}">${docLayout(sections)}</div>`);
 }
 
-function body(c) {
-  if (TAB === 'info') return `
-    <div class="cms-cols">
-      <section class="card"><div class="card-head"><div><h3>Identitas Course</h3></div></div>
-        <div class="card-pad">
-          ${fld('Kode Course *', inp('id', c.id, 'QFS-101'), 'Kode dipakai sebagai prasyarat course lain.')}
-          ${fld('Judul *', inp('title', c.title))}
-          ${fld('Judul Pendek', inp('shortTitle', c.shortTitle), 'Dipakai di stepper training path.')}
-          ${fld('Ringkasan *', ta('summary', c.summary))}
-          ${fld('Kategori *', sel('category', c.category, C.CATEGORIES))}
-          ${fld('Level *', sel('level', c.level, C.LEVELS))}
-          ${fld('Durasi *', inp('duration', c.duration, '95 menit'))}
-        </div></section>
-      <section class="card"><div class="card-head"><div><h3>Sasaran &amp; Akses</h3></div></div>
-        <div class="card-pad">
-          ${fld('Target Peserta *', ta('audience', c.audience, 2))}
-          ${fld('Peran yang Disasar', `<div class="cms-chips">${C.ROLES.map(r=>`
-            <button class="chip ${(c.roles||[]).includes(r)?'active':''}" data-role="${esc(r)}">${esc(r)}</button>`).join('')}</div>`)}
-          ${fld('Prasyarat', `<select class="cms-input" data-k="prerequisite">
-              <option value="">Tidak ada prasyarat</option>
-              ${S().courses.filter(x=>x.id!==c.id).map(x=>`<option value="${esc(x.id)}" ${c.prerequisite===x.id?'selected':''}>${esc(x.id)} · ${esc(x.title)}</option>`).join('')}
-            </select>`, 'Course ini terkunci sampai prasyarat selesai.')}
-          ${fld('Status Publikasi', `<select class="cms-input" data-k="status">
-              <option value="draft" ${c.status==='draft'?'selected':''}>Draft</option>
-              <option value="published" ${c.status==='published'?'selected':''}>Published</option></select>`)}
-        </div></section>
+function secInfo(c) {
+  return `
+    <div class="cms-field-row-3">
+      ${fld('Kode Course *', inp('id', c.id, 'QFS-101'), 'Dipakai sebagai prasyarat course lain.')}
+      ${fld('Kategori *', sel('category', c.category, C.CATEGORIES))}
+      ${fld('Level *', sel('level', c.level, C.LEVELS))}
+    </div>
+    ${fld('Judul *', inp('title', c.title))}
+    <div class="cms-field-row-2">
+      ${fld('Judul Pendek', inp('shortTitle', c.shortTitle), 'Dipakai di stepper training path.')}
+      ${fld('Durasi *', inp('duration', c.duration, '95 menit'))}
+    </div>
+    ${richField('Ringkasan *', 'summary', c.summary, 'Tampil sebagai paragraf utama di halaman course peserta.')}
+    ${richField('Target Peserta *', 'audience', c.audience)}
+    ${fld('Peran yang Disasar', `<div class="cms-chips">${C.ROLES.map(r=>`
+      <button type="button" class="chip ${(c.roles||[]).includes(r)?'active':''}" data-role="${esc(r)}">${esc(r)}</button>`).join('')}</div>`)}
+    <div class="cms-field-row-2">
+      ${fld('Prasyarat', `<select class="cms-input" data-k="prerequisite">
+          <option value="">Tidak ada prasyarat</option>
+          ${S().courses.filter(x=>x.id!==c.id).map(x=>`<option value="${esc(x.id)}" ${c.prerequisite===x.id?'selected':''}>${esc(x.id)} · ${esc(x.title)}</option>`).join('')}
+        </select>`, 'Course ini terkunci sampai prasyarat selesai.')}
+      ${fld('Status Publikasi', `<select class="cms-input" data-k="status">
+          <option value="draft" ${c.status==='draft'?'selected':''}>Draft</option>
+          <option value="published" ${c.status==='published'?'selected':''}>Published</option></select>`)}
     </div>`;
+}
 
-  if (TAB === 'outcome') return listEditor('outcomes', c, 'Hasil Belajar',
-    'Kemampuan yang harus terbukti setelah peserta menyelesaikan course.', 'Tulis satu hasil belajar…');
-
-  if (TAB === 'modules') return `
-    <section class="card">
-      <div class="card-head"><div><h3>Modul Course</h3><div class="sub">${(c.modules||[]).length} modul · urutan menentukan alur belajar</div></div>
-        <div class="right"><button class="btn btn-sm btn-primary" data-add-mod>${icon('sparkles','icon icon-xs')} Tambah Modul</button></div></div>
-      <div class="card-pad cms-list">
-        ${(c.modules||[]).length ? c.modules.map((m,i)=>`
-          <div class="cms-seq-row" data-mi="${i}">
-            <span class="cms-seq-num">${String(i+1).padStart(2,'0')}</span>
-            <span class="cms-row-main">
-              <input class="cms-inline" data-mk="title" data-mi="${i}" value="${esc(m.title||'')}" placeholder="Judul modul" />
-              <input class="cms-inline sub" data-mk="lesson" data-mi="${i}" value="${esc(m.lesson||'')}" placeholder="Sub-judul / fokus materi" />
-            </span>
-            <input class="cms-mini" data-mk="minutes" data-mi="${i}" value="${esc(m.minutes||'')}" placeholder="mnt" />
-            ${c.id==='QFS-101'?`<button class="btn btn-sm" data-cms-open="modules/${i}">Materi</button>`:''}
-            <button class="icon-btn" data-rm-mod="${i}">${icon('close','icon icon-xs')}</button>
-          </div>`).join('')
-          : `<div class="cms-empty">${icon('layers')}<p>Belum ada modul.</p></div>`}
-      </div>
-    </section>`;
-
-  if (TAB === 'pretest')  return quizEditor(c, 'pretest', 'Pre-test',
-    'Mengukur pemahaman awal sebelum materi. Tidak mengunci akses modul.');
-  if (TAB === 'posttest') return quizEditor(c, 'posttest', 'Final Assessment',
-    'Penutup course. Sertifikat terbit bila lulus passing score.');
-
-  if (TAB === 'ojt') return `
-    <div class="cms-cols">
-      <section class="card"><div class="card-head"><div><h3>Badge &amp; Sertifikat</h3></div></div>
-        <div class="card-pad">
-          ${fld('Nama Badge / Credential *', inp('badge', c.badge, 'Sertifikat operasional Lahans'), 'Ini yang diterima peserta setelah lulus.')}
-          ${fld('Masa Berlaku', inp('badgeValidity', c.badgeValidity, '12 bulan'))}
-          ${fld('Passing Score', inp('passingScore', c.passingScore, '80'))}
-          ${fld('Maksimal Attempt', inp('maxAttempt', c.maxAttempt, '3'))}
-          ${fld('Aturan Remedial', ta('remedial', c.remedial, 3))}
-          ${fld('Critical Behaviour (gagal otomatis)', ta('criticalBehavior', c.criticalBehavior, 3))}
-        </div></section>
-      <div style="display:flex;flex-direction:column;gap:16px">
-        <section class="card"><div class="card-head"><div><h3>Bobot Rubrik</h3></div>
-          <div class="right"><button class="btn btn-sm" data-add-rub>+ Kriteria</button></div></div>
-          <div class="card-pad cms-list">
-            ${(c.rubric||[]).map((r,i)=>`<div class="cms-seq-row">
-              <input class="cms-inline" data-rk="label" data-ri="${i}" value="${esc(r.label)}" />
-              <input class="cms-mini" data-rk="weight" data-ri="${i}" value="${esc(r.weight)}" />
-              <button class="icon-btn" data-rm-rub="${i}">${icon('close','icon icon-xs')}</button>
-            </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada kriteria.</p></div>`}
-          </div></section>
-        ${listEditor('assignment', c, 'Assignment OJT per Modul', 'Praktik kerja yang dinilai atasan atau Quality.', 'Tulis satu assignment…')}
-        ${listEditor('completion', c, 'Syarat Kelulusan', '', 'Tulis satu syarat…')}
-      </div>
-    </div>`;
-
-  if (TAB === 'sources') return `
-    <section class="card">
-      <div class="card-head"><div><h3>Sumber Referensi</h3><div class="sub">Standar &amp; materi resmi yang mendasari course</div></div>
-        <div class="right"><button class="btn btn-sm btn-primary" data-add-src>+ Sumber</button></div></div>
-      <div class="card-pad cms-list">
-        ${(c.sources||[]).map((s,i)=>`<div class="cms-seq-row">
+function secModules(c) {
+  return `
+    <div class="cms-flat-list">
+      ${(c.modules||[]).length ? c.modules.map((m,i)=>`
+        <div class="cms-flat-row" data-mi="${i}">
+          <span class="cms-seq-num">${String(i+1).padStart(2,'0')}</span>
           <span class="cms-row-main">
-            <input class="cms-inline" data-sk="label" data-si="${i}" value="${esc(s.label)}" placeholder="Judul sumber" />
-            <input class="cms-inline sub" data-sk="url" data-si="${i}" value="${esc(s.url)}" placeholder="https://" />
+            <input class="cms-inline" data-mk="title" data-mi="${i}" value="${esc(m.title||'')}" placeholder="Judul modul" />
+            <input class="cms-inline sub" data-mk="lesson" data-mi="${i}" value="${esc(m.lesson||'')}" placeholder="Sub-judul / fokus materi" />
           </span>
-          <input class="cms-mini wide" data-sk="type" data-si="${i}" value="${esc(s.type||'')}" placeholder="Tipe" />
-          <button class="icon-btn" data-rm-src="${i}">${icon('close','icon icon-xs')}</button>
-        </div>`).join('') || `<div class="cms-empty">${icon('file')}<p>Belum ada sumber.</p></div>`}
-      </div>
-    </section>`;
-  return '';
+          <input class="cms-mini" data-mk="minutes" data-mi="${i}" value="${esc(m.minutes||'')}" placeholder="mnt" />
+          ${c.id==='QFS-101'?`<button class="btn btn-sm" data-cms-open="modules/${i}/course">Materi</button>`:''}
+          <button class="icon-btn" data-rm-mod="${i}">${icon('close','icon icon-xs')}</button>
+        </div>`).join('')
+        : `<div class="cms-empty">${icon('layers')}<p>Belum ada modul.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-add-mod>${icon('sparkles','icon icon-xs')} Tambah Modul</button>`;
 }
 
-function listEditor(key, c, title, sub, ph) {
-  const arr = c[key] || [];
-  return `<section class="card">
-    <div class="card-head"><div><h3>${esc(title)}</h3>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>
-      <div class="right"><button class="btn btn-sm" data-add-item="${key}">+ Tambah</button></div></div>
-    <div class="card-pad cms-list">
-      ${arr.map((t,i)=>`<div class="cms-seq-row">
-        <span class="cms-seq-num">${i+1}</span>
-        <textarea class="cms-inline grow" data-lk="${key}" data-li="${i}" rows="2" placeholder="${esc(ph)}">${esc(t)}</textarea>
-        <button class="icon-btn" data-rm-item="${key}|${i}">${icon('close','icon icon-xs')}</button>
-      </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada isi.</p></div>`}
-    </div></section>`;
-}
-
-function quizEditor(c, key, title, sub) {
+function secQuiz(c, key) {
   const qs = c[key] || [];
-  return `<section class="card">
-    <div class="card-head"><div><h3>${esc(title)}</h3><div class="sub">${esc(sub)}</div></div>
-      <div class="right"><span class="badge badge-neutral">${qs.length} soal</span>
-        <button class="btn btn-sm btn-primary" data-add-q="${key}">+ Soal</button></div></div>
-    <div class="card-pad cms-list">
+  return `
+    <div class="cms-flat-list">
       ${qs.map((q,i)=>`<div class="cms-q">
         <div class="cms-q-head"><span class="cms-seq-num">${i+1}</span>
           <textarea class="cms-inline grow" data-qk="question" data-qq="${key}|${i}" rows="2" placeholder="Tulis pertanyaan…">${esc(q.question)}</textarea>
@@ -683,7 +700,63 @@ function quizEditor(c, key, title, sub) {
         </div>
         <textarea class="cms-inline pembahasan" data-qk="rationale" data-qq="${key}|${i}" rows="2" placeholder="Pembahasan / rationale…">${esc(q.rationale||'')}</textarea>
       </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada soal.</p></div>`}
-    </div></section>`;
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-add-q="${key}">${icon('sparkles','icon icon-xs')} Tambah Soal</button>`;
+}
+
+function secOjt(c) {
+  return `
+    <div class="cms-field-row-badge">
+      ${fld('Nama Badge / Credential *', inp('badge', c.badge, 'Sertifikat operasional Lahans'))}
+      ${fld('Masa Berlaku', inp('badgeValidity', c.badgeValidity, '12 bulan'))}
+      ${fld('Passing Score', inp('passingScore', c.passingScore, '80'))}
+      ${fld('Maks. Attempt', inp('maxAttempt', c.maxAttempt, '3'))}
+    </div>
+    <div class="cms-field-row-2">
+      ${richField('Aturan Remedial', 'remedial', c.remedial)}
+      ${richField('Critical Behaviour (gagal otomatis)', 'criticalBehavior', c.criticalBehavior)}
+    </div>
+    <div class="cms-divider"><span>Bobot Rubrik</span></div>
+    <div class="cms-flat-list">
+      ${(c.rubric||[]).map((r,i)=>`<div class="cms-flat-row">
+        <input class="cms-inline" data-rk="label" data-ri="${i}" value="${esc(r.label)}" />
+        <input class="cms-mini" data-rk="weight" data-ri="${i}" value="${esc(r.weight)}" />
+        <button class="icon-btn" data-rm-rub="${i}">${icon('close','icon icon-xs')}</button>
+      </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada kriteria.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin:10px 0 20px" data-add-rub>+ Kriteria</button>
+    <div class="cms-divider"><span>Assignment OJT per Modul</span></div>
+    ${listEditor('assignment', c, 'Tulis satu assignment…')}
+    <div class="cms-divider"><span>Syarat Kelulusan</span></div>
+    ${listEditor('completion', c, 'Tulis satu syarat…')}`;
+}
+
+function secSources(c) {
+  return `
+    <div class="cms-flat-list">
+      ${(c.sources||[]).map((s,i)=>`<div class="cms-flat-row">
+        <span class="cms-row-main">
+          <input class="cms-inline" data-sk="label" data-si="${i}" value="${esc(s.label)}" placeholder="Judul sumber" />
+          <input class="cms-inline sub" data-sk="url" data-si="${i}" value="${esc(s.url)}" placeholder="https://" />
+        </span>
+        <input class="cms-mini wide" data-sk="type" data-si="${i}" value="${esc(s.type||'')}" placeholder="Tipe" />
+        <button class="icon-btn" data-rm-src="${i}">${icon('close','icon icon-xs')}</button>
+      </div>`).join('') || `<div class="cms-empty">${icon('file')}<p>Belum ada sumber.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-add-src>${icon('sparkles','icon icon-xs')} Tambah Sumber</button>`;
+}
+
+function listEditor(key, c, ph) {
+  const arr = c[key] || [];
+  return `
+    <div class="cms-flat-list">
+      ${arr.map((t,i)=>`<div class="cms-flat-row">
+        <span class="cms-seq-num">${i+1}</span>
+        <textarea class="cms-inline grow" data-lk="${key}" data-li="${i}" rows="2" placeholder="${esc(ph)}">${esc(t)}</textarea>
+        <button class="icon-btn" data-rm-item="${key}|${i}">${icon('close','icon icon-xs')}</button>
+      </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada isi.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-add-item="${key}">+ Tambah</button>`;
 }
 
 /* ---------------- Interaksi ---------------- */
@@ -693,6 +766,7 @@ document.addEventListener('input', e => {
   const f = e.target.closest('[data-course-form]'); if (!f) return;
   const c = cur(); if (!c) return;
   const t = e.target, d = t.dataset;
+  if (d.rich) { c[d.rich] = t.innerHTML; return; }
   if (d.k) { c[d.k] = t.value; return; }
   if (d.mk) { c.modules[+d.mi][d.mk] = d.mk === 'minutes' ? (parseInt(t.value,10)||'') : t.value; return; }
   if (d.lk) { c[d.lk][+d.li] = t.value; return; }
@@ -704,8 +778,7 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const a = e.target.dataset.ans;
-  if (a) { const [k,i,oi] = a.split('|'); cur()[k][+i].answer = +oi; re(); return; }
-  if (e.target.id === 'cq' || e.target.id === 'ccat' || e.target.id === 'cst') return;
+  if (a) { const [k,i,oi] = a.split('|'); cur()[k][+i].answer = +oi; return; }
 });
 
 document.addEventListener('input', e => {
@@ -717,16 +790,13 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('click', e => {
-  const tab = e.target.closest('[data-cstab]');
-  if (tab) { TAB = tab.dataset.cstab; re(); return; }
-
   if (e.target.closest('[data-new-course]')) {
     const id = 'NEW-' + (S().courses.length + 1);
     S().courses.push({ id, title: 'Course Baru', kind: 'sample', category: C.CATEGORIES[0], level: 'Foundation',
       duration: '', summary: '', audience: '', roles: [], modules: [], outcomes: [], sources: [],
       pretest: [], posttest: [], assignment: [], rubric: [], completion: [], badge: '', badgeValidity: '',
       passingScore: 80, maxAttempt: 3, status: 'draft' });
-    TAB = 'info'; C.render(['courses', id]); return;
+    C.render(['courses', id]); return;
   }
   if (e.target.closest('[data-save-course]')) { C.save(); return; }
   if (e.target.closest('[data-preview-course]')) { location.hash = '#/course/' + e.target.closest('[data-preview-course]').dataset.previewCourse; return; }
@@ -756,18 +826,17 @@ document.addEventListener('click', e => {
 })();
 /* =========================================================
    CMS — Modul & Materi, Bank Soal, Badge, Knowledge Base
+   Modul juga dokumen mengalir (2 section, anchor-nav).
    ========================================================= */
 (() => {
-const C = window.CMS, { esc, icon, shell, pageHead, statusBadge, ring, completeness } = C;
+const C = window.CMS, { esc, icon, shell, pageHead, statusBadge, docLayout, segs } = C;
 const S = () => C.state;
 const fld = (l,h,hint) => `<label class="cms-field"><span class="cms-label">${esc(l)}</span>${h}${hint?`<em class="cms-hint">${esc(hint)}</em>`:''}</label>`;
 const inp = (k,v,ph='') => `<input class="cms-input" data-mk2="${k}" value="${esc(v||'')}" placeholder="${esc(ph)}" />`;
 
 /* ================= Modul & Materi ================= */
-let MTAB = 'utama';
-
-C.ROUTES.modules = (i) => {
-  if (i !== undefined) return modEditor(+i);
+C.ROUTES.modules = (i, back) => {
+  if (i !== undefined) return modEditor(+i, back);
   const mods = S().modules;
   return shell('modules', `
     ${pageHead('Modul & materi', 'Materi Mendalam Modul',
@@ -789,108 +858,119 @@ C.ROUTES.modules = (i) => {
     </section>`);
 };
 
-function modEditor(i) {
+function modEditor(i, back) {
   const m = S().modules[i];
   if (!m) return C.ROUTES.modules();
+  const sections = [
+    { id: 'utama', label: 'Materi Utama', ok: (m.objectives||[]).length>0 && (m.sections||[]).length>0, html: modUtama(m) },
+    { id: 'check', label: 'Rangkuman & Knowledge Check', ok: (m.knowledgeCheck||[]).length>0, html: modCheck(m) },
+  ];
+  const backHref = back === 'course' ? `courses/${m.courseId}` : 'modules';
+  const backLabel = back === 'course' ? `Kembali ke ${m.courseId}` : 'Daftar modul';
   return shell('modules', `
-    ${pageHead(`Modul ${i+1} · ${m.courseId}`, m.title, '',
-      `<button class="btn btn-sm" data-cms-go="modules">${icon('chevron-left','icon icon-xs')} Kembali</button>
-       <button class="btn btn-sm" data-prev-mod="${i}">${icon('play','icon icon-xs')} Lihat sebagai peserta</button>
-       <button class="btn btn-primary btn-sm" data-save-mod>${icon('check','icon icon-xs')} Simpan</button>`)}
-    <div class="tabbar">
-      <button class="tab ${MTAB==='utama'?'active':''}" data-mtab2="utama"><span class="tnum">1</span>Materi Utama</button>
-      <button class="tab ${MTAB==='check'?'active':''}" data-mtab2="check"><span class="tnum">2</span>Rangkuman &amp; Knowledge Check</button>
+    <div class="page-head">
+      <div><span class="kicker">Modul ${i+1} · ${esc(m.courseId)}</span><h1>${esc(m.title)}</h1></div>
+      <div class="head-actions">
+        <button class="btn btn-sm" data-cms-open="${backHref}">${icon('chevron-left','icon icon-xs')} ${esc(backLabel)}</button>
+        <button class="btn btn-sm" data-prev-mod="${i}">${icon('play','icon icon-xs')} Lihat sebagai peserta</button>
+        <button class="btn btn-primary btn-sm" data-save-mod>${icon('check','icon icon-xs')} Simpan</button>
+      </div>
     </div>
-    <div class="cms-form" data-mod-form="${i}">${MTAB==='utama'?modUtama(m,i):modCheck(m,i)}</div>`);
+    <div class="cms-form" data-mod-form="${i}">${docLayout(sections)}</div>`);
 }
 
-function arrCard(title, sub, key, arr, i, ph) {
-  return `<section class="card">
-    <div class="card-head"><div><h3>${esc(title)}</h3>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>
-      <div class="right"><button class="btn btn-sm" data-madd="${key}">+ Tambah</button></div></div>
-    <div class="card-pad cms-list">
-      ${(arr||[]).map((t,x)=>`<div class="cms-seq-row">
+function arrCard(key, arr, ph) {
+  return `
+    <div class="cms-flat-list">
+      ${(arr||[]).map((t,x)=>`<div class="cms-flat-row">
         <span class="cms-seq-num">${x+1}</span>
         <textarea class="cms-inline grow" data-marr="${key}|${x}" rows="2" placeholder="${esc(ph)}">${esc(t)}</textarea>
         <button class="icon-btn" data-mrm="${key}|${x}">${icon('close','icon icon-xs')}</button>
       </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada isi.</p></div>`}
-    </div></section>`;
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-madd="${key}">+ Tambah</button>`;
 }
 
-function modUtama(m, i) {
+function modUtama(m) {
   return `
-    <section class="card"><div class="card-head"><div><h3>Identitas Modul</h3></div></div>
-      <div class="card-pad cms-cols2">
-        ${fld('Judul Modul', inp('title', m.title))}
-        ${fld('Sub-judul / Fokus', inp('lesson', m.lesson))}
-      </div></section>
-    ${arrCard('Tujuan Pembelajaran','Ditampilkan sebagai grid di awal modul.','objectives',m.objectives,i,'Tulis satu tujuan…')}
-    <section class="card">
-      <div class="card-head"><div><h3>Materi Mendalam</h3><div class="sub">${(m.sections||[]).length} bagian bernomor</div></div>
-        <div class="right"><button class="btn btn-sm btn-primary" data-madd-sec>+ Bagian</button></div></div>
-      <div class="card-pad cms-list">
-        ${(m.sections||[]).map((s,x)=>`<div class="cms-sec">
-          <div class="cms-sec-head"><span class="cms-seq-num">${String(x+1).padStart(2,'0')}</span>
-            <input class="cms-inline" data-msec="title|${x}" value="${esc(s.title)}" placeholder="Judul bagian" />
-            <button class="icon-btn" data-mrm-sec="${x}">${icon('close','icon icon-xs')}</button></div>
-          <textarea class="cms-inline" data-msec="paragraphs|${x}" rows="4" placeholder="Paragraf — pisahkan antar paragraf dengan baris kosong">${esc((s.paragraphs||[]).join('\n\n'))}</textarea>
-          <textarea class="cms-inline" data-msec="bullets|${x}" rows="3" placeholder="Poin bullet — satu per baris">${esc((s.bullets||[]).join('\n'))}</textarea>
-        </div>`).join('') || `<div class="cms-empty">${icon('book')}<p>Belum ada bagian materi.</p></div>`}
-      </div></section>
-    ${arrCard('Playbook Operasional','Langkah praktis bernomor.','playbook',m.playbook,i,'ISTILAH lalu penjelasan…')}
-    <div class="cms-cols">
-      ${arrCard('Red Flags','Tanda bahaya yang harus dikenali.','redFlags',m.redFlags,i,'Tulis satu red flag…')}
-      <section class="card">
-        <div class="card-head"><div><h3>Kesalahan Umum</h3></div>
-          <div class="right"><button class="btn btn-sm" data-madd-mis>+ Tambah</button></div></div>
-        <div class="card-pad cms-list">
+    <div class="cms-field-row-2">
+      ${fld('Judul Modul', inp('title', m.title))}
+      ${fld('Sub-judul / Fokus', inp('lesson', m.lesson))}
+    </div>
+    <div class="cms-divider"><span>Tujuan Pembelajaran</span></div>
+    ${arrCard('objectives', m.objectives, 'Tulis satu tujuan…')}
+
+    <div class="cms-divider"><span>Materi Mendalam</span></div>
+    <div class="cms-flat-list">
+      ${(m.sections||[]).map((s,x)=>`<div class="cms-sec">
+        <div class="cms-sec-head"><span class="cms-seq-num">${String(x+1).padStart(2,'0')}</span>
+          <input class="cms-inline" data-msec="title|${x}" value="${esc(s.title)}" placeholder="Judul bagian" />
+          <button class="icon-btn" data-mrm-sec="${x}">${icon('close','icon icon-xs')}</button></div>
+        <textarea class="cms-inline" data-msec="paragraphs|${x}" rows="4" placeholder="Paragraf — pisahkan antar paragraf dengan baris kosong">${esc((s.paragraphs||[]).join('\n\n'))}</textarea>
+        <textarea class="cms-inline" data-msec="bullets|${x}" rows="3" placeholder="Poin bullet — satu per baris">${esc((s.bullets||[]).join('\n'))}</textarea>
+      </div>`).join('') || `<div class="cms-empty">${icon('book')}<p>Belum ada bagian materi.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-madd-sec>+ Bagian Materi</button>
+
+    <div class="cms-divider"><span>Playbook Operasional</span></div>
+    ${arrCard('playbook', m.playbook, 'ISTILAH lalu penjelasan…')}
+
+    <div class="cms-field-row-2" style="margin-top:22px">
+      <div>
+        <div class="cms-label" style="margin-bottom:8px">Red Flags</div>
+        ${arrCard('redFlags', m.redFlags, 'Tulis satu red flag…')}
+      </div>
+      <div>
+        <div class="cms-label" style="margin-bottom:8px">Kesalahan Umum</div>
+        <div class="cms-flat-list">
           ${(m.mistakes||[]).map((x,idx)=>`<div class="cms-sec">
             <div class="cms-sec-head">
               <input class="cms-inline" data-mmis="title|${idx}" value="${esc(x.title)}" placeholder="Judul kesalahan" />
               <button class="icon-btn" data-mrm-mis="${idx}">${icon('close','icon icon-xs')}</button></div>
             <textarea class="cms-inline" data-mmis="explanation|${idx}" rows="2" placeholder="Penjelasan">${esc(x.explanation)}</textarea>
           </div>`).join('') || `<div class="cms-empty">${icon('info')}<p>Belum ada.</p></div>`}
-        </div></section>
+        </div>
+        <button class="btn btn-sm" style="margin-top:12px" data-madd-mis>+ Tambah</button>
+      </div>
     </div>
-    <section class="card">
-      <div class="card-head"><div><h3>Studi Kasus Bertingkat</h3><div class="sub">${(m.cases||[]).length} kasus</div></div>
-        <div class="right"><button class="btn btn-sm btn-primary" data-madd-case>+ Kasus</button></div></div>
-      <div class="card-pad cms-list">
-        ${(m.cases||[]).map((cs,x)=>`<div class="cms-sec">
-          <div class="cms-sec-head">
-            <input class="cms-mini wide" data-mcase="level|${x}" value="${esc(cs.level)}" placeholder="Level" />
-            <input class="cms-inline" data-mcase="title|${x}" value="${esc(cs.title)}" placeholder="Judul kasus" />
-            <button class="icon-btn" data-mrm-case="${x}">${icon('close','icon icon-xs')}</button></div>
-          <textarea class="cms-inline" data-mcase="situation|${x}" rows="3" placeholder="Situasi">${esc(cs.situation)}</textarea>
-          <textarea class="cms-inline" data-mcase="facts|${x}" rows="3" placeholder="Fakta yang tersedia — satu per baris">${esc((cs.facts||[]).join('\n'))}</textarea>
-          <textarea class="cms-inline" data-mcase="prompts|${x}" rows="2" placeholder="Pertanyaan diskusi — satu per baris">${esc((cs.prompts||[]).join('\n'))}</textarea>
-          <textarea class="cms-inline" data-mcase="response|${x}" rows="3" placeholder="Respons yang direkomendasikan — satu per baris">${esc((cs.response||[]).join('\n'))}</textarea>
-          <input class="cms-inline" data-mcase="lesson|${x}" value="${esc(cs.lesson||'')}" placeholder="Pelajaran utama" />
-        </div>`).join('') || `<div class="cms-empty">${icon('message')}<p>Belum ada studi kasus.</p></div>`}
-      </div></section>`;
+
+    <div class="cms-divider"><span>Studi Kasus Bertingkat</span></div>
+    <div class="cms-flat-list">
+      ${(m.cases||[]).map((cs,x)=>`<div class="cms-sec">
+        <div class="cms-sec-head">
+          <input class="cms-mini wide" data-mcase="level|${x}" value="${esc(cs.level)}" placeholder="Level" />
+          <input class="cms-inline" data-mcase="title|${x}" value="${esc(cs.title)}" placeholder="Judul kasus" />
+          <button class="icon-btn" data-mrm-case="${x}">${icon('close','icon icon-xs')}</button></div>
+        <textarea class="cms-inline" data-mcase="situation|${x}" rows="3" placeholder="Situasi">${esc(cs.situation)}</textarea>
+        <textarea class="cms-inline" data-mcase="facts|${x}" rows="3" placeholder="Fakta yang tersedia — satu per baris">${esc((cs.facts||[]).join('\n'))}</textarea>
+        <textarea class="cms-inline" data-mcase="prompts|${x}" rows="2" placeholder="Pertanyaan diskusi — satu per baris">${esc((cs.prompts||[]).join('\n'))}</textarea>
+        <textarea class="cms-inline" data-mcase="response|${x}" rows="3" placeholder="Respons yang direkomendasikan — satu per baris">${esc((cs.response||[]).join('\n'))}</textarea>
+        <input class="cms-inline" data-mcase="lesson|${x}" value="${esc(cs.lesson||'')}" placeholder="Pelajaran utama" />
+      </div>`).join('') || `<div class="cms-empty">${icon('message')}<p>Belum ada studi kasus.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-madd-case>+ Studi Kasus</button>`;
 }
 
-function modCheck(m, i) {
+function modCheck(m) {
   const qs = m.knowledgeCheck || [];
   return `
-    ${arrCard('Yang Wajib Diingat','Rangkuman inti modul.','summary',m.summary,i,'Tulis satu poin rangkuman…')}
-    <section class="card">
-      <div class="card-head"><div><h3>Knowledge Check</h3><div class="sub">Peserta melihat pembahasan langsung setelah menjawab</div></div>
-        <div class="right"><span class="badge badge-neutral">${qs.length} soal</span>
-          <button class="btn btn-sm btn-primary" data-madd-q>+ Soal</button></div></div>
-      <div class="card-pad cms-list">
-        ${qs.map((q,x)=>`<div class="cms-q">
-          <div class="cms-q-head"><span class="cms-seq-num">${x+1}</span>
-            <textarea class="cms-inline grow" data-mq="question|${x}" rows="2" placeholder="Pertanyaan…">${esc(q.question)}</textarea>
-            <button class="icon-btn" data-mrm-q="${x}">${icon('close','icon icon-xs')}</button></div>
-          <div class="cms-opts">${(q.options||[]).map((o,oi)=>`
-            <label class="cms-opt ${q.answer===oi?'right':''}">
-              <input type="radio" name="mq-${x}" ${q.answer===oi?'checked':''} data-mans="${x}|${oi}" />
-              <input class="cms-inline" data-mopt="${x}|${oi}" value="${esc(o)}" placeholder="Opsi jawaban" />
-            </label>`).join('')}</div>
-          <textarea class="cms-inline pembahasan" data-mq="rationale|${x}" rows="2" placeholder="Pembahasan…">${esc(q.rationale||'')}</textarea>
-        </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada soal.</p></div>`}
-      </div></section>`;
+    <div class="cms-divider" style="margin-top:0"><span>Yang Wajib Diingat</span></div>
+    ${arrCard('summary', m.summary, 'Tulis satu poin rangkuman…')}
+    <div class="cms-divider"><span>Knowledge Check</span></div>
+    <div class="cms-flat-list">
+      ${qs.map((q,x)=>`<div class="cms-q">
+        <div class="cms-q-head"><span class="cms-seq-num">${x+1}</span>
+          <textarea class="cms-inline grow" data-mq="question|${x}" rows="2" placeholder="Pertanyaan…">${esc(q.question)}</textarea>
+          <button class="icon-btn" data-mrm-q="${x}">${icon('close','icon icon-xs')}</button></div>
+        <div class="cms-opts">${(q.options||[]).map((o,oi)=>`
+          <label class="cms-opt ${q.answer===oi?'right':''}">
+            <input type="radio" name="mq-${x}" ${q.answer===oi?'checked':''} data-mans="${x}|${oi}" />
+            <input class="cms-inline" data-mopt="${x}|${oi}" value="${esc(o)}" placeholder="Opsi jawaban" />
+          </label>`).join('')}</div>
+        <textarea class="cms-inline pembahasan" data-mq="rationale|${x}" rows="2" placeholder="Pembahasan…">${esc(q.rationale||'')}</textarea>
+      </div>`).join('') || `<div class="cms-empty">${icon('clipboard')}<p>Belum ada soal.</p></div>`}
+    </div>
+    <button class="btn btn-sm" style="margin-top:12px" data-madd-q>${icon('sparkles','icon icon-xs')} Tambah Soal</button>`;
 }
 
 /* ================= Bank Soal ================= */
@@ -906,11 +986,11 @@ C.ROUTES.assessments = () => {
   return shell('assessments', `
     ${pageHead('Bank soal','Assessment Terpusat',
       'Semua soal yang tersebar di course, dikumpulkan agar mudah diperiksa dan disamakan standarnya.')}
-    <div class="grid g-3">
-      ${kpiMini('clipboard','sky','Total Soal',total)}
-      ${kpiMini('shield','amber','Course Tanpa Pre-test',noPre)}
-      ${kpiMini('check-circle','green','Course Ber-assessment',S().courses.filter(c=>(c.posttest||[]).length).length)}
-    </div>
+    <section class="cms-stat-strip">
+      <div><b>${total}</b><span>Total soal</span></div>
+      <div><b>${noPre}</b><span>Course tanpa pre-test</span></div>
+      <div><b>${S().courses.filter(c=>(c.posttest||[]).length).length}</b><span>Course ber-assessment</span></div>
+    </section>
     <section class="card">
       <div class="table-wrap"><table class="tbl">
         <thead><tr><th>Course</th><th>Jenis</th><th>Jumlah Soal</th><th>Passing</th><th>Max Attempt</th><th></th></tr></thead>
@@ -923,25 +1003,21 @@ C.ROUTES.assessments = () => {
     </section>`);
 };
 
-const kpiMini = (ico,tone,t,v) => `<div class="card kpi">
-  <div class="kpi-top"><div class="kpi-icon tone-${tone}">${icon(ico,'icon icon-sm')}</div><div class="kpi-title">${esc(t)}</div></div>
-  <div class="kpi-value">${esc(v)}</div></div>`;
-
 /* ================= Badge & Sertifikat ================= */
 C.ROUTES.badges = () => {
   const cs = S().courses;
   const withB = cs.filter(c=>c.badge);
   return shell('badges', `
     ${pageHead('Badge & sertifikat','Credential yang Diterima Peserta',
-      'Badge terbit otomatis setelah peserta lulus final assessment dan OJT.')}
-    <div class="grid g-3">
-      ${kpiMini('shield','green','Course Ber-badge',withB.length)}
-      ${kpiMini('close','rose','Belum Ada Badge',cs.length-withB.length)}
-      ${kpiMini('clock','amber','Berbatas Waktu',cs.filter(c=>c.badgeValidity).length)}
-    </div>
+      'Badge terbit otomatis setelah peserta lulus final assessment dan OJT. Ubah langsung di tabel.')}
+    <section class="cms-stat-strip">
+      <div><b>${withB.length}</b><span>Course ber-badge</span></div>
+      <div><b>${cs.length-withB.length}</b><span>Belum ada badge</span></div>
+      <div><b>${cs.filter(c=>c.badgeValidity).length}</b><span>Berbatas waktu</span></div>
+    </section>
     <section class="card">
-      <div class="card-head"><div><h3>Daftar Badge</h3><div class="sub">Ubah langsung di tabel</div></div></div>
-      <div class="table-wrap"><table class="tbl">
+      <div class="table-wrap"><table class="tbl" style="table-layout:fixed">
+        <colgroup><col style="width:12%"><col style="width:46%"><col style="width:18%"><col style="width:12%"><col style="width:12%"></colgroup>
         <thead><tr><th>Course</th><th>Nama Badge</th><th>Masa Berlaku</th><th>Passing</th><th>Status</th></tr></thead>
         <tbody>${cs.map(c=>`<tr>
           <td class="code">${esc(c.id)}</td>
@@ -961,7 +1037,8 @@ C.ROUTES.knowledge = () => {
       'Materi pendukung yang tidak menghitung penyelesaian course.',
       `<button class="btn btn-primary btn-sm" data-add-kb>${icon('sparkles','icon icon-xs')} Entri Baru</button>`)}
     <section class="card">
-      <div class="table-wrap"><table class="tbl">
+      <div class="table-wrap"><table class="tbl" style="table-layout:fixed">
+        <colgroup><col style="width:11%"><col style="width:27%"><col style="width:44%"><col style="width:12%"><col style="width:6%"></colgroup>
         <thead><tr><th>Kode</th><th>Judul</th><th>Deskripsi</th><th>Status</th><th></th></tr></thead>
         <tbody>${ks.map((k,i)=>`<tr>
           <td><input class="cms-mini" data-kk="code|${i}" value="${esc(k.code)}" /></td>
@@ -974,8 +1051,8 @@ C.ROUTES.knowledge = () => {
 };
 
 /* ================= Interaksi ================= */
-const curMod = () => S().modules[+(location.hash.split('/').pop())];
-const reMod = () => C.render(['modules', location.hash.split('/').pop()]);
+const curMod = () => S().modules[+segs()[1]];
+const reMod = () => C.render(['modules', segs()[1], segs()[2]]);
 const lines = v => v.split('\n').map(x=>x.trim()).filter(Boolean);
 
 document.addEventListener('input', e => {
@@ -984,7 +1061,14 @@ document.addEventListener('input', e => {
   if (d.kk) { const [k,i]=d.kk.split('|'); S().knowledge[+i][k]=t.value; return; }
   const f = t.closest('[data-mod-form]'); if (!f) return;
   const m = curMod(); if (!m) return;
-  if (d.mk2) { m[d.mk2] = t.value; return; }
+  if (d.mk2) {
+    m[d.mk2] = t.value;
+    // judul/sub-judul/menit modul juga tampil di halaman course (tab Modul) —
+    // sinkronkan supaya kedua tempat edit selalu selaras.
+    const course = S().courses.find(c => c.id === m.courseId);
+    if (course && course.modules[m.idx]) course.modules[m.idx][d.mk2] = t.value;
+    return;
+  }
   if (d.marr) { const [k,x]=d.marr.split('|'); m[k][+x]=t.value; return; }
   if (d.msec) { const [k,x]=d.msec.split('|');
     m.sections[+x][k] = k==='title' ? t.value : (k==='paragraphs' ? t.value.split(/\n{2,}/).map(s=>s.trim()).filter(Boolean) : lines(t.value)); return; }
@@ -997,13 +1081,12 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const a = e.target.dataset.mans;
-  if (a) { const [x,oi]=a.split('|'); curMod().knowledgeCheck[+x].answer=+oi; reMod(); }
+  if (a) { const [x,oi]=a.split('|'); curMod().knowledgeCheck[+x].answer=+oi; }
 });
 
 document.addEventListener('click', e => {
-  const tb = e.target.closest('[data-mtab2]'); if (tb) { MTAB = tb.dataset.mtab2; reMod(); return; }
   if (e.target.closest('[data-save-mod]')) { C.save(); return; }
-  const pm = e.target.closest('[data-prev-mod]'); if (pm) { location.hash = `#/course/QFS-101/m${pm.dataset.prevMod}`; return; }
+  const pm = e.target.closest('[data-prev-mod]'); if (pm) { const m=curMod(); location.hash = `#/course/${m.courseId}/m${pm.dataset.prevMod}`; return; }
 
   if (e.target.closest('[data-add-kb]')) { S().knowledge.push({code:'NEW',title:'Entri baru',description:'',tone:'slate',tabId:'',status:'draft'}); C.render(['knowledge']); return; }
   const rk = e.target.closest('[data-rm-kb]'); if (rk) { S().knowledge.splice(+rk.dataset.rmKb,1); C.render(['knowledge']); return; }

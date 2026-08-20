@@ -31,6 +31,7 @@ const pathProgress = p => Math.round((p.courseIds.filter(isDone).length / p.cour
 /* ---------- helpers ---------- */
 const el = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+const stripHtml = s => String(s ?? '').replace(/<[^>]+>/g, ' ');
 const icon = (name, cls = 'icon') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
 const minutesOf = c => parseInt(String(c.duration).replace(/\D/g, ''), 10) || 0;
 const LETTER = ['A', 'B', 'C', 'D', 'E'];
@@ -166,7 +167,7 @@ function courseCard(c) {
       <div class="cc-cat">${esc(c.category)}</div>
       <h3 class="cc-title">${esc(c.title)}</h3>
     </div>
-    <p class="cc-sum">${esc(c.summary)}</p>
+    <p class="cc-sum">${c.summary}</p>
     <div class="cc-meta">
       <span>${icon('clock', 'icon icon-xs')} ${esc(c.duration)}</span>
       <span>${icon('book', 'icon icon-xs')} ${c.moduleCount} modul</span>
@@ -486,7 +487,7 @@ function renderPathList() {
   const q = pathQuery.trim().toLowerCase();
   const list = document.getElementById('pathList');
   if (!list) return;
-  const items = PATHS.filter(p => !q || `${p.title} ${p.eyebrow} ${p.description}`.toLowerCase().includes(q));
+  const items = PATHS.filter(p => !q || `${p.title} ${p.eyebrow} ${stripHtml(p.description)}`.toLowerCase().includes(q));
   list.innerHTML = items.length ? items.map(p => `
     <button class="path-item ${p.id === activePathId ? 'active' : ''}" data-path="${p.id}">
       <span class="pi-mark">${p.letter}</span>
@@ -512,7 +513,7 @@ function renderPathDetail() {
     <div style="flex:1;min-width:220px">
       <span class="kicker">${esc(p.eyebrow)}</span>
       <h2 style="margin-top:4px">${esc(p.title)}</h2>
-      <p>${esc(p.description)}</p>
+      <p>${p.description}</p>
     </div>
     <div class="detail-actions">
       <button class="btn btn-sm" data-goto="elearning">Lihat di Katalog</button>
@@ -615,7 +616,7 @@ function filteredCourses() {
     .filter(c => filters.category === 'Semua kategori' || c.category === filters.category)
     .filter(c => filters.role === 'Semua peran' || (c.roles || []).includes(filters.role))
     .filter(c => filters.level === 'Semua level' || c.level === filters.level)
-    .filter(c => !q || `${c.id} ${c.title} ${c.category} ${c.summary}`.toLowerCase().includes(q));
+    .filter(c => !q || `${c.id} ${c.title} ${c.category} ${stripHtml(c.summary)}`.toLowerCase().includes(q));
 }
 
 function renderCatalog() {
@@ -739,7 +740,7 @@ function courseView(courseId) {
       <div class="ch-main">
         <span class="kicker">${esc(c.id)} · ${esc(c.level)} · ${esc(c.category)}</span>
         <h1>${esc(c.title)}</h1>
-        <p>${esc(c.summary)}</p>
+        <p>${c.summary}</p>
         <div class="ch-meta">
           <span>${icon('book', 'icon icon-xs')} ${c.moduleCount} Items</span>
           <span>${icon('clock', 'icon icon-xs')} ${esc(c.duration)} · Self-paced</span>
@@ -798,10 +799,10 @@ function courseTabBody(c, tab) {
         <div class="card-head"><div><h3>Hasil Belajar</h3><div class="sub">Kemampuan yang harus terbukti setelah course</div></div></div>
         <div class="card-pad" style="display:flex;flex-direction:column;gap:18px">
           ${(c.outcomes || []).length ? `<ul class="outcome-list">${c.outcomes.map(o => `<li>${icon('check-circle', 'icon icon-sm')}<span>${esc(o)}</span></li>`).join('')}</ul>`
-            : `<p style="font-size:13.5px;color:var(--text-2)">${esc(c.summary)}</p>`}
+            : `<p style="font-size:13.5px;color:var(--text-2)">${c.summary}</p>`}
           <div>
             <h4 style="font-size:13px;margin-bottom:6px">Target Peserta</h4>
-            <p style="font-size:13.5px;color:var(--text-2);line-height:1.7">${esc(c.audience)}</p>
+            <p style="font-size:13.5px;color:var(--text-2);line-height:1.7">${c.audience}</p>
             ${(c.roles || []).length ? `<div class="chips" style="margin-top:10px">${c.roles.map(r => `<span class="badge badge-neutral">${esc(r)}</span>`).join('')}</div>` : ''}
           </div>
         </div>
