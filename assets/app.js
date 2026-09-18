@@ -1279,6 +1279,7 @@ function render() {
 
   const main = document.getElementById('view');
   main.innerHTML = view.html;
+  document.getElementById('pageTitle').textContent = view.crumb[view.crumb.length - 1][0];
   document.getElementById('crumb').innerHTML = view.crumb.map(([label, href], i) => {
     const last = i === view.crumb.length - 1;
     const text = last ? `<b>${esc(label)}</b>` : (href ? `<a data-goto="${href}">${esc(label)}</a>` : esc(label));

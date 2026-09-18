@@ -354,9 +354,11 @@ function render(seg) {
 
   main.innerHTML = html;
 
+  const curLabel = a ? (SECTIONS.find(s => s.seg === a) || {}).label || a : 'CMS';
+  document.getElementById('pageTitle').textContent = curLabel;
   document.getElementById('crumb').innerHTML =
     `<a data-cms-exit>Learning Development</a> <span class="sep">/</span> ` +
-    (a ? `<a data-cms-go="">CMS</a> <span class="sep">/</span> <b>${esc((SECTIONS.find(s => s.seg === a) || {}).label || a)}</b>`
+    (a ? `<a data-cms-go="">CMS</a> <span class="sep">/</span> <b>${esc(curLabel)}</b>`
        : `<b>CMS</b>`);
 
   document.querySelectorAll('.nav-sub-item').forEach(x => x.classList.remove('active'));

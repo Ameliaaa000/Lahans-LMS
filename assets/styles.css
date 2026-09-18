@@ -296,7 +296,11 @@ button { font: inherit; color: inherit; }
   box-shadow: var(--shadow-float);
 }
 
-.crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-3); flex-wrap: wrap; }
+.crumb-wrap { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.page-title { font-size: 17px; font-weight: 700; color: #000; line-height: 1.2; margin: 0; }
+:root[data-theme="dark"] .page-title { color: var(--text); }
+
+.crumb { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-3); flex-wrap: wrap; }
 .crumb b { font-weight: 600; color: var(--text); }
 .crumb .sep { color: var(--border-strong); }
 .crumb a { cursor: pointer; }
