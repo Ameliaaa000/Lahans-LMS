@@ -1353,7 +1353,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeMobileNav(); closeNotifPanel(); }
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('globalSearch').focus(); }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); document.getElementById('topbarSearch').focus(); }
   const card = e.target.closest?.('.course-card');
   if (card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.hash = `#/course/${card.dataset.course}`; }
 });
@@ -1364,11 +1364,16 @@ document.getElementById('menuToggle').addEventListener('click', () => {
   document.getElementById('scrim').classList.toggle('open');
 });
 
-document.getElementById('globalSearch').addEventListener('keydown', e => {
-  if (e.key !== 'Enter') return;
-  filters.q = e.target.value;
+function runGlobalSearch(q) {
+  filters.q = q;
   if (parseRoute().name === 'elearning') { document.getElementById('fq').value = filters.q; renderCatalog(); }
   else location.hash = '#/elearning';
+}
+['globalSearch', 'topbarSearch'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    runGlobalSearch(e.target.value);
+  });
 });
 
 document.getElementById('exportBtn').addEventListener('click', () => toast('Export tersedia setelah prototype terhubung ke data HCMS.'));

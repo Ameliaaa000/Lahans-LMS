@@ -302,6 +302,8 @@ button { font: inherit; color: inherit; }
 .crumb a { cursor: pointer; }
 .crumb a:hover { color: var(--primary); text-decoration: underline; }
 
+.topbar-search { flex: 0 1 340px; min-width: 0; margin-left: 20px; }
+
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
 .icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--border);
@@ -892,6 +894,7 @@ a.kb-card:hover { border-color: var(--primary-soft-2); box-shadow: var(--shadow-
   .ch-side { width: 100%; }
 }
 @media (max-width: 900px) {
+  .topbar-search { display: none; }
   .topbar-actions .icon-btn { display: none; }
   .topbar-actions .btn:not(.btn-primary) { display: none; }
   .crumb { font-size: 12.5px; }
